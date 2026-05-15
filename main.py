@@ -395,7 +395,7 @@ def generate_lesson(session_id, message):
 
     # --- Llamar al modelo de Gemini ---
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3.1-flash-lite",
         contents=prompt
     )
 
