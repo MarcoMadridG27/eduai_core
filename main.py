@@ -3,12 +3,28 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from services import generate_lesson_sync, generate_lesson_stream
 import json
+import asyncio
+import logging
+
+from database import init_db
+from knowledge import init_knowledge_base
 
 app = FastAPI(
     title="Generador de Sesiones Educativas",
     description="API para generar sesiones con Structured Outputs y WebSockets",
     version="2.0.0"
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# Startup tasks: initialize DB and knowledge base off the import path
+@app.on_event("startup")
+async def startup():
+    logger.info("Startup: inicializando base de datos y base de conocimientos")
+    await asyncio.to_thread(init_db)
+    await asyncio.to_thread(init_knowledge_base)
 
 # --- CORS Middleware ---
 origins = ["*"]  # Ajusta en producción
@@ -77,7 +93,7 @@ async def websocket_generate(websocket: WebSocket):
             
         await websocket.close()
     except WebSocketDisconnect:
-        print("Cliente WebSocket desconectado")
+        logger.info("Cliente WebSocket desconectado")
     except Exception as e:
         await websocket.send_text(json.dumps({"status": "error", "message": str(e)}))
         await websocket.close()
