@@ -1,0 +1,37 @@
+Buena pregunta. Actualmente ese campo **influye directamente en el prompt que se le manda a la IA** para generar la sesión. Específicamente cambia tres cosas en el output:
+
+---
+
+## Lo que cambia según el instrumento elegido
+
+**Criterios de evaluación** — El lenguaje y estructura cambia. Una rúbrica genera criterios con niveles de logro (Logrado / En proceso / En inicio). Una lista de cotejo genera criterios como afirmaciones binarias (SÍ/NO). Una escala de valoración genera criterios con puntaje (1-4).
+
+**Evidencia de aprendizaje** — Cambia qué se le pide al estudiante que produzca. Con rúbrica la evidencia suele ser un producto más elaborado (ensayo, proyecto, exposición). Con lista de cotejo es más específica y observable (resuelve X ejercicios, identifica Y elemento).
+
+**La sección de cierre** — El instrumento define cómo el docente va a recoger la evidencia al final de la sesión. Si es ficha de observación, el cierre menciona que el docente circula y observa. Si es lista de cotejo, menciona que el estudiante entrega su ficha resuelta.
+
+---
+
+## El problema real que tiene ahora
+
+Ese campo es **decorativo en la práctica** si el prompt no está bien construido. Si el prompt solo dice algo genérico como *"usa este instrumento: lista de cotejo"* pero no le dice a la IA exactamente qué estructura debe tener cada sección según ese instrumento, la IA lo ignora o lo menciona superficialmente.
+
+Para que realmente influya, el prompt debería tener lógica condicional explícita, algo así:
+
+```
+SI instrumento = "Rúbrica":
+  → Genera criterios con 3 niveles: Logrado / En proceso / En inicio
+  → La evidencia debe ser un producto evaluable con esos niveles
+  → Al final del cierre incluye: "El docente aplica la rúbrica mientras..."
+
+SI instrumento = "Lista de cotejo":
+  → Genera criterios como afirmaciones observables (SÍ/NO)
+  → Máximo 6 criterios concretos y medibles
+  → La evidencia es la ficha de trabajo resuelta individualmente
+```
+
+---
+
+## Mi recomendación
+
+Ese campo debería además **generar automáticamente el instrumento completo** al final del PDF — es decir, si el docente elige "Lista de cotejo", el PDF exportado debería incluir una página adicional con la lista de cotejo lista para imprimir con los criterios ya rellenados. Eso sería el verdadero valor diferenciador del campo, porque hoy los docentes tienen que crear ese instrumento por separado. ¿Quieres que lo agregue al template del PDF?
