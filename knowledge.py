@@ -2,14 +2,14 @@ import chromadb
 import requests
 import re
 import time
+import logging
 from google import genai
 from google.genai import types
 from google.api_core import retry
 from config import client, TXT_URL
 
-# ========================
-# ChromaDB con currículo escolar
-# ========================
+logger = logging.getLogger(__name__)
+
 class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
     document_mode = True
     @retry.Retry(predicate=lambda e: isinstance(e, genai.errors.APIError) and e.code in {429,503})
@@ -33,10 +33,10 @@ def init_knowledge_base():
     try:
         # Se verifica si ya hay documentos para no re-descargar
         if knowledge_db.count() > 0:
-            print("Base de conocimientos ya inicializada.")
+            logger.info("Base de conocimientos ya inicializada.")
             return
             
-        print("Descargando currículo y cargando en base de conocimientos...")
+        logger.info("Descargando currículo y cargando en base de conocimientos...")
         response = requests.get(TXT_URL, timeout=30)
         response.raise_for_status()
         
@@ -52,12 +52,12 @@ def init_knowledge_base():
             batch_ids = ids[i:i+MAX_BATCH]
             try:
                 knowledge_db.add(documents=batch_docs, ids=batch_ids)
-                print(f"Lote {i//MAX_BATCH + 1} cargado ({len(batch_docs)} fragmentos)")
+                logger.info("Lote %d cargado (%d fragmentos)", i//MAX_BATCH + 1, len(batch_docs))
                 time.sleep(1)  # opcional, evita saturar la API
             except Exception as e:
-                print(f"Error en el lote {i//MAX_BATCH + 1}: {e}")
+                logger.exception("Error en el lote %d: %s", i//MAX_BATCH + 1, e)
     except Exception as e:
-        print(f"Error inicializando la base de conocimientos: {e}")
+        logger.exception("Error inicializando la base de conocimientos: %s", e)
 
-# Inicializar al importar
-init_knowledge_base()
+# Nota: la inicialización de la base de conocimientos se realiza en el evento
+# de arranque de la aplicación para evitar efectos secundarios en import-time.

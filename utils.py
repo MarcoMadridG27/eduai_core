@@ -1,9 +1,6 @@
 import re
 import json
 
-# ========================
-# Funciones de utilidad
-# ========================
 def parse_teacher_message(message: str):
     """Extrae los campos enviados por el frontend como texto plano."""
     titulo = re.search(r"Título:\s*(.*)", message)
@@ -35,42 +32,7 @@ def parse_teacher_message(message: str):
         "competencia_transversal": competencia_transversal.group(1).strip() if competencia_transversal else "",
         "materiales": materiales.group(1).strip() if materiales else "",
     }
-
-def clean_model_output(raw: str):
-    """Intenta limpiar outputs de modelos que vienen como texto con code-fences
-    o texto extra y devuelve (obj, cleaned_string).
-    - Si puede parsear JSON devuelve el objeto y la cadena usada.
-    - Si no puede, devuelve (None, cleaned_candidate).
-    """
-    if not isinstance(raw, str):
-        return None, None
-
-    s = raw.strip()
-
-    # Remover code fences como ```json ... ``` o ``` ... ```
-    m = re.match(r"^```(?:json)?\s*([\s\S]*)\s*```$", s, re.IGNORECASE)
-    if m:
-        s = m.group(1).strip()
-
-    # A veces vienen con comillas extra o texto antes/ despues; buscar primer '{' y último '}'
-    first = s.find('{')
-    last = s.rfind('}')
-    if first != -1 and last != -1 and last > first:
-        candidate = s[first:last+1]
-    else:
-        candidate = s
-
-    # Intentar cargar JSON directamente
-    try:
-        obj = json.loads(candidate)
-        return obj, candidate
-    except Exception:
-        # Intentar otras limpiezas comunes
-        candidate2 = candidate.strip().strip('"')
-        candidate2 = candidate2.replace('\n', '\\n')
-        try:
-            obj = json.loads(candidate2)
-            return obj, candidate2
-        except Exception:
-            # No se pudo parsear
-            return None, candidate
+# clean_model_output function removed because it's not referenced
+# def clean_model_output(raw: str):
+#     # (commented) Implemented JSON cleaning for model outputs.
+#     pass
