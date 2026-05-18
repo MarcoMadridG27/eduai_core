@@ -32,8 +32,27 @@ def build_core_prompt(inputs, retrieved_docs):
         f"- Contexto sociocultural: {inputs.get('contexto', '')}\n"
         f"- Duración: {inputs.get('duracion', '')} (Ajusta los tiempos a esto)\n"
         f"- Enfoques Transversales: {inputs.get('enfoque_transversal', '')} / {inputs.get('competencia_transversal', '')}\n"
-        f"- Materiales disponibles: {inputs.get('materiales', '')}\n\n"
+        f"- Materiales disponibles: {inputs.get('materiales', '')}\n"
     )
+
+    instrumento = inputs.get('instrumento_evaluacion', '').strip()
+    if instrumento and instrumento != "A decisión de la IA":
+        prompt += f"- Instrumento de Evaluación Sugerido: {instrumento}\n"
+        if "Rúbrica" in instrumento:
+            prompt += "  * Genera criterios de evaluación con 3 niveles de logro: Logrado / En proceso / En inicio.\n"
+            prompt += "  * La evidencia de aprendizaje debe ser un producto evaluable con esos niveles.\n"
+            prompt += "  * En el CIERRE de la secuencia metodológica incluye explícitamente: 'El docente aplica la rúbrica mientras...'\n"
+        elif "Lista de cotejo" in instrumento:
+            prompt += "  * Genera criterios de evaluación como afirmaciones observables (SÍ/NO). Máximo 6 criterios concretos y medibles.\n"
+            prompt += "  * La evidencia es la ficha de trabajo o producto resuelto individualmente.\n"
+            prompt += "  * En el CIERRE incluye que el estudiante entrega su evidencia para verificarla con la lista de cotejo.\n"
+        elif "Escala de valoración" in instrumento:
+            prompt += "  * Genera criterios con puntaje (por ejemplo, del 1 al 4).\n"
+            prompt += "  * La evidencia de aprendizaje debe poder puntuarse según esa escala.\n"
+        elif "Ficha de observación" in instrumento:
+            prompt += "  * Genera criterios orientados a la observación del desempeño.\n"
+            prompt += "  * En el CIERRE menciona explícitamente que el docente circula y observa con la ficha de observación.\n"
+    prompt += "\n"
 
     if retrieved_docs:
         prompt += "Fragmentos relevantes del Currículo Nacional:\n"
@@ -61,5 +80,9 @@ def build_resources_prompt(core_plan_json):
         "5. Evaluación formativa con respuestas correctas.\n"
         "6. Un comunicado amigable para padres (apropiado para WhatsApp).\n"
         "7. Actividades diferenciadas (Refuerzo, Consolidación, Profundización).\n"
+        "8. El instrumento de evaluación detallado con criterios/ítems y niveles/escala (Si se sugirió uno, estructúralo según ese tipo).\n"
     )
+    # También podemos sugerir al prompt de recursos que agregue el instrumento en "evaluacionFormativa" si es posible,
+    # aunque la estructura actual pide preguntas/respuestas/criterios. Le daremos más contexto.
+    prompt += "Nota: La evaluación formativa y el instrumento generado deben reflejar el instrumento de evaluación seleccionado si se indicó alguno.\n"
     return prompt

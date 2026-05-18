@@ -23,7 +23,7 @@ class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
         return [e.values for e in response.embeddings]
 
 embed_fn = GeminiEmbeddingFunction()
-chroma_client = chromadb.Client()
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
 knowledge_db = chroma_client.get_or_create_collection(
     name="curriculo_secundaria", embedding_function=embed_fn
 )
@@ -53,9 +53,10 @@ def init_knowledge_base():
             try:
                 knowledge_db.add(documents=batch_docs, ids=batch_ids)
                 logger.info("Lote %d cargado (%d fragmentos)", i//MAX_BATCH + 1, len(batch_docs))
-                time.sleep(1)  # opcional, evita saturar la API
+                time.sleep(5)  # Tiempo de espera mayor para evitar límite de la API gratuita (15 RPM)
             except Exception as e:
                 logger.exception("Error en el lote %d: %s", i//MAX_BATCH + 1, e)
+                time.sleep(10) # Si hay error, esperar más tiempo antes de intentar el siguiente
     except Exception as e:
         logger.exception("Error inicializando la base de conocimientos: %s", e)
 

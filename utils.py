@@ -16,6 +16,7 @@ def parse_teacher_message(message: str):
     enfoque_transversal = re.search(r"Enfoque Transversal:\s*(.*)", message)
     competencia_transversal = re.search(r"Competencia Transversal:\s*(.*)", message)
     materiales = re.search(r"Materiales:\s*(.*)", message)
+    instrumento = re.search(r"Instrumento de Evaluación Sugerido:\s*(.*)", message)
 
     return {
         "titulo": titulo.group(1).strip() if titulo else "",
@@ -31,6 +32,7 @@ def parse_teacher_message(message: str):
         "enfoque_transversal": enfoque_transversal.group(1).strip() if enfoque_transversal else "",
         "competencia_transversal": competencia_transversal.group(1).strip() if competencia_transversal else "",
         "materiales": materiales.group(1).strip() if materiales else "",
+        "instrumento_evaluacion": instrumento.group(1).strip() if instrumento else "",
     }
 # clean_model_output function removed because it's not referenced
 # def clean_model_output(raw: str):

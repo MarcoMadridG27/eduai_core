@@ -59,6 +59,11 @@ class ActividadesDiferenciadas(BaseModel):
     consolidacion: List[str]
     profundizacion: List[str]
 
+class InstrumentoEvaluacionGenerado(BaseModel):
+    tipo_instrumento: str
+    criterios_o_items: List[str]
+    escalas_o_niveles: List[str]
+
 class RecursosAdicionales(BaseModel):
     fichasDeTrabajo: List[FichaTrabajo]
     problemasYEjercicios: List[ProblemaEjercicio]
@@ -67,3 +72,4 @@ class RecursosAdicionales(BaseModel):
     evaluacionFormativa: EvaluacionFormativa
     comunicadoParaPadres: str
     actividadesDiferenciadas: ActividadesDiferenciadas
+    instrumentoEvaluacionGenerado: InstrumentoEvaluacionGenerado
