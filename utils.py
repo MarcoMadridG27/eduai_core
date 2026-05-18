@@ -2,6 +2,31 @@ import re
 import json
 
 
+def _split_multi_value(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        items = value
+    else:
+        items = [part.strip() for part in str(value).split(",")]
+    return [item.strip() for item in items if str(item).strip()]
+
+
+def parse_duration_hours(value, default=2):
+    """Extrae la cantidad de horas pedagógicas desde texto o número."""
+    if value is None or value == "":
+        return default
+    if isinstance(value, (int, float)):
+        return int(value)
+    match = re.search(r"(\d+)", str(value))
+    return int(match.group(1)) if match else default
+
+
+def format_duration_text(value, default=2):
+    hours = parse_duration_hours(value, default=default)
+    return f"{hours} hora{'s' if hours != 1 else ''}"
+
+
 def parse_teacher_message(message: str):
     """Parsea la entrada del docente.
 
@@ -14,6 +39,7 @@ def parse_teacher_message(message: str):
     """
     if not message:
         return {
+            "tema": "",
             "titulo": "",
             "docente": "",
             "fecha": "",
@@ -27,6 +53,7 @@ def parse_teacher_message(message: str):
             "enfoque_transversal": "",
             "competencia_transversal": "",
             "materiales": "",
+            "horasClase": 2,
         }
 
     # 1) Intentar JSON
@@ -62,12 +89,16 @@ def parse_teacher_message(message: str):
 
             out = {v: "" for v in key_map.values()}
             out["duracion"] = "2 horas"
+            out["horasClase"] = 2
 
             for k, v in payload.items():
                 k_low = str(k).strip().lower()
                 mapped = key_map.get(k_low)
                 if mapped:
                     out[mapped] = str(v).strip()
+
+            out["tema"] = out.get("titulo", "")
+            out["horasClase"] = parse_duration_hours(out.get("duracion"), default=2)
 
             return out
     except Exception:
@@ -89,6 +120,7 @@ def parse_teacher_message(message: str):
 
     matches = list(pattern.finditer(message))
     normalized = {
+        "tema": "",
         "titulo": "",
         "docente": "",
         "fecha": "",
@@ -102,6 +134,7 @@ def parse_teacher_message(message: str):
         "enfoque_transversal": "",
         "competencia_transversal": "",
         "materiales": "",
+        "horasClase": 2,
     }
 
     label_map = {
@@ -128,8 +161,67 @@ def parse_teacher_message(message: str):
             normalized[mapped] = value
 
     # 3) Si no encontramos nada, usar todo el texto como título
-    if not any(v for v in normalized.values() if v and v != "2 horas"):
+    if not normalized.get("titulo") and not normalized.get("docente") and not normalized.get("contexto") and not normalized.get("competencias"):
         normalized["titulo"] = message.strip()
 
+    normalized["tema"] = normalized.get("titulo", "")
+    normalized["horasClase"] = parse_duration_hours(normalized.get("duracion"), default=2)
+
     return normalized
+
+
+def normalize_session_input(payload):
+    """Normaliza payloads de frontend, JSON o texto libre al contrato interno."""
+    if payload is None:
+        payload = {}
+
+    if isinstance(payload, str):
+        parsed = parse_teacher_message(payload)
+        return {
+            "tema": parsed.get("tema") or parsed.get("titulo", ""),
+            "titulo": parsed.get("tema") or parsed.get("titulo", ""),
+            "docente": parsed.get("docente", ""),
+            "fecha": parsed.get("fecha", ""),
+            "grado": parsed.get("grado", ""),
+            "seccion": parsed.get("seccion", ""),
+            "competenciasSeleccionadas": _split_multi_value(parsed.get("competencias", "")),
+            "capacidades": _split_multi_value(parsed.get("capacidades", "")),
+            "ciclo": parsed.get("ciclo", ""),
+            "contexto": parsed.get("contexto", ""),
+            "duracion": format_duration_text(parsed.get("duracion", "2 horas")),
+            "horasClase": parse_duration_hours(parsed.get("horasClase") or parsed.get("duracion"), default=2),
+            "enfoqueTransversal": parsed.get("enfoque_transversal", ""),
+            "competenciaTransversal": parsed.get("competencia_transversal", ""),
+            "materialesDisponibles": parsed.get("materiales", ""),
+        }
+
+    if not isinstance(payload, dict):
+        payload = dict(payload)
+
+    tema = payload.get("tema") or payload.get("titulo") or payload.get("title") or ""
+    competencias = payload.get("competenciasSeleccionadas") or payload.get("competencias") or []
+    capacidades = payload.get("capacidades") or payload.get("capacidadesSeleccionadas") or []
+    materiales = payload.get("materialesDisponibles") or payload.get("materiales") or []
+    duracion = payload.get("duracion") or payload.get("horasClase") or "2 horas"
+    horas_clase = parse_duration_hours(payload.get("horasClase") or duracion, default=2)
+
+    return {
+        "tema": str(tema).strip(),
+        "titulo": str(tema).strip(),
+        "docente": str(payload.get("docente", "")).strip(),
+        "fecha": str(payload.get("fecha", "")).strip(),
+        "grado": str(payload.get("grado", "")).strip(),
+        "seccion": str(payload.get("seccion", "")).strip(),
+        "competenciasSeleccionadas": _split_multi_value(competencias),
+        "capacidades": _split_multi_value(capacidades),
+        "ciclo": str(payload.get("ciclo", "")).strip(),
+        "contexto": str(payload.get("contexto", "")).strip(),
+        "duracion": format_duration_text(duracion, default=horas_clase),
+        "horasClase": horas_clase,
+        "enfoqueTransversal": str(payload.get("enfoqueTransversal") or payload.get("enfoque_transversal") or "").strip(),
+        "competenciaTransversal": str(payload.get("competenciaTransversal") or payload.get("competencia_transversal") or "").strip(),
+        "materialesDisponibles": ", ".join(_split_multi_value(materiales)),
+        "materialesLista": _split_multi_value(materiales),
+        "rawInput": payload,
+    }
 

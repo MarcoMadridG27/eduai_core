@@ -3,8 +3,8 @@ import asyncio
 from google.genai import types
 from config import client
 from knowledge import knowledge_db, embed_fn
-from database import save_message
-from utils import parse_teacher_message
+from database import save_message, save_session_input, save_generated_session, update_session_status
+from utils import normalize_session_input
 from prompts import build_core_prompt, build_resources_prompt
 from schemas import CoreLessonPlan, RecursosAdicionales
 
@@ -17,16 +17,20 @@ async def generate_lesson_stream(session_id: str, message: str):
     Generador asíncrono que emite el progreso de la generación paso a paso,
     usando Prompt Chaining y Structured Outputs.
     """
-    # 1. Parsear datos
+    # 1. Parsear y persistir datos de entrada
     yield json.dumps({"status": "progress", "step": "Analizando la solicitud del docente..."})
-    inputs = parse_teacher_message(message)
+    inputs = normalize_session_input(message)
+    save_session_input(session_id, inputs)
+    update_session_status(session_id, "generating")
     await asyncio.sleep(0.5)
 
     # 2. Buscar en Vector DB
     yield json.dumps({"status": "progress", "step": "Buscando contexto en el Currículo Nacional..."})
     query_parts = [
-        inputs.get("titulo", ""), inputs.get("competencias", ""), 
-        inputs.get("capacidades", ""), inputs.get("grado", ""),
+        inputs.get("tema", ""),
+        ", ".join(inputs.get("competenciasSeleccionadas", [])),
+        ", ".join(inputs.get("capacidades", [])),
+        inputs.get("grado", ""),
         inputs.get("contexto", "")
     ]
     query_text = " ".join(part for part in query_parts if part).strip()
@@ -39,6 +43,7 @@ async def generate_lesson_stream(session_id: str, message: str):
     retrieved_docs = result["documents"][0] if result["documents"] else []
 
     if not client:
+        update_session_status(session_id, "error")
         yield json.dumps({"status": "error", "message": "API Key de Gemini no configurada correctamente"})
         return
 
@@ -64,6 +69,7 @@ async def generate_lesson_stream(session_id: str, message: str):
         response_core = await asyncio.to_thread(generate_core)
         core_plan_json = response_core.text
     except Exception as e:
+        update_session_status(session_id, "error")
         yield json.dumps({"status": "error", "message": f"Error en Fase 1: {str(e)}"})
         return
     
@@ -87,6 +93,7 @@ async def generate_lesson_stream(session_id: str, message: str):
         response_resources = await asyncio.to_thread(generate_resources)
         resources_json = response_resources.text
     except Exception as e:
+        update_session_status(session_id, "error")
         yield json.dumps({"status": "error", "message": f"Error en Fase 2: {str(e)}"})
         return
 
@@ -96,6 +103,7 @@ async def generate_lesson_stream(session_id: str, message: str):
         final_lesson = json.loads(core_plan_json)
         final_lesson["recursosAdicionales"] = json.loads(resources_json)
     except Exception as e:
+        update_session_status(session_id, "error")
         yield json.dumps({"status": "error", "message": f"Error parseando JSON final: {str(e)}"})
         return
 
@@ -103,25 +111,29 @@ async def generate_lesson_stream(session_id: str, message: str):
     def save_logs():
         save_message(session_id, "user", json.dumps(inputs, ensure_ascii=False))
         save_message(session_id, "bot", json.dumps(final_lesson, ensure_ascii=False))
+        save_generated_session(session_id, final_lesson)
     
     await asyncio.to_thread(save_logs)
+    update_session_status(session_id, "completed")
 
     # 6. Emitir completado
     yield json.dumps({"status": "completed", "data": final_lesson})
+
+
+async def generate_lesson_result(session_id: str, message):
+    """Consume el stream y devuelve solo el resultado final o el error."""
+    result = {}
+    async for chunk in generate_lesson_stream(session_id, message):
+        data = json.loads(chunk)
+        if data["status"] == "completed":
+            result = data["data"]
+        elif data["status"] == "error":
+            result = {"error": data["message"]}
+    return result
 
 def generate_lesson_sync(session_id: str, message: str):
     """
     Función síncrona retrocompatible por si el frontend antiguo (o WhatsApp) sigue llamando
     al webhook normal. Espera a que termine el stream y devuelve solo el resultado final.
     """
-    async def run_gen():
-        result = {}
-        async for chunk in generate_lesson_stream(session_id, message):
-            data = json.loads(chunk)
-            if data["status"] == "completed":
-                result = data["data"]
-            elif data["status"] == "error":
-                result = {"error": data["message"]}
-        return result
-    
-    return asyncio.run(run_gen())
+    return asyncio.run(generate_lesson_result(session_id, message))

@@ -2,46 +2,86 @@
 # Construcción de prompts (Fase 1 y 2)
 # ========================
 
-def build_core_prompt(inputs, retrieved_docs):
-    """
-    Construye el prompt para la primera fase: Plan Base de la sesión.
-    """
-    prompt = (
-        "Requisitos de la sesión:\n"
-        "- Usa lenguaje claro y profesional dirigido a docentes peruanos.\n"
-        "- RESPETA ESTRICTAMENTE la duración especificada (1 hora pedagógica = 45 minutos).\n"
-        "- Adecúa la dificultad y las estrategias pedagógicas al grado o ciclo indicado.\n"
-        "- CONTEXTUALIZACIÓN OBLIGATORIA: TODAS las actividades deben relacionarse con el contexto sociocultural indicado.\n"
-        "- La distribución del tiempo debe ser realista (Inicio: 15-20%, Desarrollo: 60-70%, Cierre: 10-15%).\n"
-        "- Secuencia Metodológica Detallada:\n"
-        "  * INICIO: motivación contextualizada, problematización, saberes previos, propósito\n"
-        "  * DESARROLLO: situación problemática + 5 procesos didácticos de Matemática + trabajo variado\n"
-        "  * CIERRE: metacognición, transferencia, evaluación formativa\n"
-        "- Procesos Didácticos de Matemática (siempre en este orden): "
-        "1. Familiarización con el problema, 2. Búsqueda y ejecución de estrategias, "
-        "3. Socialización de representaciones, 4. Reflexión y formalización, 5. Planteamiento de otros problemas.\n\n"
-    )
 
-    prompt += (
-        "**DATOS GENERALES Y CONTEXTO:**\n"
-        f"- Título: {inputs.get('titulo', '')}\n"
-        f"- Docente: {inputs.get('docente', '')}\n"
-        f"- Fecha: {inputs.get('fecha', '')}\n"
-        f"- Grado/Sección/Ciclo: {inputs.get('grado', '')} {inputs.get('seccion', '')} ({inputs.get('ciclo', '')})\n"
-        f"- Competencias y Capacidades: {inputs.get('competencias', '')} / {inputs.get('capacidades', '')}\n"
-        f"- Contexto sociocultural: {inputs.get('contexto', '')}\n"
-        f"- Duración: {inputs.get('duracion', '')} (Ajusta los tiempos a esto)\n"
-        f"- Enfoques Transversales: {inputs.get('enfoque_transversal', '')} / {inputs.get('competencia_transversal', '')}\n"
-        f"- Materiales disponibles: {inputs.get('materiales', '')}\n\n"
+def _as_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    return str(value).strip()
+
+
+def build_core_prompt(inputs, retrieved_docs):
+    """Construye el prompt para la primera fase con el contrato JSON esperado."""
+    tema = _as_text(inputs.get("tema") or inputs.get("titulo"))
+    ciclo = _as_text(inputs.get("ciclo"))
+    contexto = _as_text(inputs.get("contexto"))
+    horas_clase = inputs.get("horasClase") or inputs.get("horas_clase") or 2
+    competencias = _as_text(inputs.get("competenciasSeleccionadas") or inputs.get("competencias"))
+    capacidades = _as_text(inputs.get("capacidades"))
+    materiales = _as_text(inputs.get("materialesDisponibles") or inputs.get("materiales"))
+    docente = _as_text(inputs.get("docente"))
+    fecha = _as_text(inputs.get("fecha"))
+    grado = _as_text(inputs.get("grado"))
+    seccion = _as_text(inputs.get("seccion"))
+    enfoque_transversal = _as_text(inputs.get("enfoqueTransversal") or inputs.get("enfoque_transversal"))
+    competencia_transversal = _as_text(inputs.get("competenciaTransversal") or inputs.get("competencia_transversal"))
+
+    prompt = (
+        "Eres un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "
+        "Debes devolver SOLO un JSON válido, sin markdown ni texto adicional.\n\n"
+        "Requisitos obligatorios:\n"
+        "- Idioma: español.\n"
+        "- Coherencia pedagógica entre competencias, capacidades, propósito, evaluación y actividades.\n"
+        "- Contextualización real al entorno indicado.\n"
+        "- Usa la cantidad de horas clase indicada y distribúyelas de forma realista.\n"
+        "- Respeta el siguiente orden en procesos didácticos: Familiarización con el problema, Búsqueda y ejecución de estrategias, Socialización de representaciones, Reflexión y formalización, Planteamiento de otros problemas.\n\n"
+        "Contrato de salida esperado:\n"
+        "{\n"
+        '  "tema": "string",\n'
+        '  "ciclo": "string",\n'
+        '  "contexto": "string",\n'
+        '  "horasClase": number,\n'
+        '  "competenciasSeleccionadas": ["string"],\n'
+        '  "capacidades": ["string"],\n'
+        '  "materialesDisponibles": "string",\n'
+        '  "competenciaDescripcion": "string",\n'
+        '  "criteriosEvaluacion": "string",\n'
+        '  "evidenciasAprendizaje": "string",\n'
+        '  "propositoSesion": "string",\n'
+        '  "secuenciaMetodologica": { "inicio": "string", "desarrollo": "string", "cierre": "string" },\n'
+        '  "distribucionHoras": "string",\n'
+        '  "procesosDidacticos": ["string"],\n'
+        '  "actividadesContextualizadas": ["string"],\n'
+        '  "materialesDidacticosSugeridos": ["string"]\n'
+        "}\n\n"
+        "Datos de entrada:\n"
+        f"- Tema: {tema}\n"
+        f"- Docente: {docente}\n"
+        f"- Fecha: {fecha}\n"
+        f"- Grado: {grado}\n"
+        f"- Sección: {seccion}\n"
+        f"- Ciclo: {ciclo}\n"
+        f"- Contexto sociocultural: {contexto}\n"
+        f"- Horas clase: {horas_clase}\n"
+        f"- Competencias seleccionadas: {competencias}\n"
+        f"- Capacidades: {capacidades}\n"
+        f"- Materiales disponibles: {materiales}\n"
+        f"- Enfoque transversal: {enfoque_transversal}\n"
+        f"- Competencia transversal: {competencia_transversal}\n\n"
+        "Fragmentos relevantes del Currículo Nacional:\n"
     )
 
     if retrieved_docs:
-        prompt += "Fragmentos relevantes del Currículo Nacional:\n"
         for i, doc in enumerate(retrieved_docs, 1):
             prompt += f"{i}. {doc.strip()}\n"
-        prompt += "\n"
+    else:
+        prompt += "- No se recuperaron fragmentos adicionales.\n"
 
-    prompt += "Genera el Plan Base de la sesión estructurada."
+    prompt += (
+        "\nGenera una sesión completa, pedagógicamente sólida y realista. "
+        "Asegúrate de que `horasClase` sea numérico y que las listas sean arrays JSON válidos."
+    )
     return prompt
 
 
