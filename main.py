@@ -137,6 +137,69 @@ async def save_session_endpoint(request: Request):
     )
     return JSONResponse({"status": "ok", "session_id": session_id})
 
+@app.post("/api/sessions/{session_id}/like")
+async def like_session(session_id: str):
+    """Incrementa los likes de una sesión pública."""
+    from database import get_session, _upsert_session_row
+    import json
+
+    session = get_session(session_id)
+    if not session or not session.get("generated_data"):
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+
+    data = session["generated_data"]
+    likes = data.get("likes", 0) + 1
+    data["likes"] = likes
+
+    _upsert_session_row(
+        session_id,
+        source=session["source"],
+        status=session["status"],
+        generated_data=json.dumps(data, ensure_ascii=False)
+    )
+    return JSONResponse({"status": "ok", "likes": likes})
+
+@app.post("/api/sessions/{session_id}/comment")
+async def add_comment(session_id: str, request: Request):
+    """Añade un comentario a una sesión pública."""
+    from database import get_session, _upsert_session_row
+    import json
+
+    payload = await read_request_payload(request)
+    author = payload.get("author", "Anónimo")
+    text = payload.get("text", "")
+    
+    if not text:
+        raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
+
+    session = get_session(session_id)
+    if not session or not session.get("generated_data"):
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+
+    data = session["generated_data"]
+    comments = data.get("comments", [])
+    
+    import datetime
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    new_comment = {
+        "id": int(datetime.datetime.now().timestamp() * 1000),
+        "author": author,
+        "text": text,
+        "time": now_str
+    }
+    
+    comments.insert(0, new_comment)
+    data["comments"] = comments
+
+    _upsert_session_row(
+        session_id,
+        source=session["source"],
+        status=session["status"],
+        generated_data=json.dumps(data, ensure_ascii=False)
+    )
+    return JSONResponse({"status": "ok", "comment": new_comment})
+
 @app.get("/api/sessions/{session_id}")
 async def get_session_detail(session_id: str):
     session = get_session(session_id)
