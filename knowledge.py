@@ -1,18 +1,22 @@
-import chromadb
-import requests
+import logging
 import re
 import time
-import logging
+
+import chromadb
+import requests
 from google import genai
-from google.genai import types
 from google.api_core import retry
-from config import client, TXT_URL
+from google.genai import types
+
+from config import TXT_URL, client
 
 logger = logging.getLogger(__name__)
 
+
 class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
     document_mode = True
-    @retry.Retry(predicate=lambda e: isinstance(e, genai.errors.APIError) and e.code in {429,503})
+
+    @retry.Retry(predicate=lambda e: isinstance(e, genai.errors.APIError) and e.code in {429, 503})
     def __call__(self, input):
         task = "retrieval_document" if self.document_mode else "retrieval_query"
         response = client.models.embed_content(
@@ -22,11 +26,13 @@ class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
         )
         return [e.values for e in response.embeddings]
 
+
 embed_fn = GeminiEmbeddingFunction()
 chroma_client = chromadb.Client()
 knowledge_db = chroma_client.get_or_create_collection(
     name="curriculo_secundaria", embedding_function=embed_fn
 )
+
 
 def init_knowledge_base():
     """Descarga e indexa el currículo en ChromaDB si no está ya cargado."""
@@ -35,27 +41,30 @@ def init_knowledge_base():
         if knowledge_db.count() > 0:
             logger.info("Base de conocimientos ya inicializada.")
             return
-            
-        logger.info("Descargando currículo y cargando en base de conocimientos...")
+
+        logger.info(
+            "Descargando currículo y cargando en base de conocimientos...")
         response = requests.get(TXT_URL, timeout=30)
         response.raise_for_status()
-        
+
         text = response.text
         chunks = re.split(r'\n{2,}', text)  # separa por párrafos
         docs = [chunk.strip() for chunk in chunks if len(chunk.strip()) > 50]
-        
+
         MAX_BATCH = 100
         ids = [f"frag_{i}" for i in range(len(docs))]
-        
+
         for i in range(0, len(docs), MAX_BATCH):
             batch_docs = docs[i:i+MAX_BATCH]
             batch_ids = ids[i:i+MAX_BATCH]
             try:
                 knowledge_db.add(documents=batch_docs, ids=batch_ids)
-                logger.info("Lote %d cargado (%d fragmentos)", i//MAX_BATCH + 1, len(batch_docs))
+                logger.info("Lote %d cargado (%d fragmentos)",
+                            i//MAX_BATCH + 1, len(batch_docs))
                 time.sleep(1)  # opcional, evita saturar la API
             except Exception as e:
-                logger.exception("Error en el lote %d: %s", i//MAX_BATCH + 1, e)
+                logger.exception("Error en el lote %d: %s",
+                                 i//MAX_BATCH + 1, e)
     except Exception as e:
         logger.exception("Error inicializando la base de conocimientos: %s", e)
 

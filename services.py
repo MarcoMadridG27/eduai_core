@@ -1,16 +1,20 @@
-import json
 import asyncio
+import json
+
 from google.genai import types
+
 from config import client
-from knowledge import knowledge_db, embed_fn
-from database import save_message, save_session_input, save_generated_session, update_session_status
-from utils import normalize_session_input
+from database import (save_generated_session, save_message, save_session_input,
+                      update_session_status)
+from knowledge import embed_fn, knowledge_db
 from prompts import build_core_prompt, build_resources_prompt
 from schemas import CoreLessonPlan, RecursosAdicionales
+from utils import normalize_session_input
 
 # ========================
 # Lógica de Negocio (Chaining & Streaming)
 # ========================
+
 
 async def generate_lesson_stream(session_id: str, message: str):
     """
@@ -52,10 +56,10 @@ async def generate_lesson_stream(session_id: str, message: str):
     # 3. Fase 1: Core Plan
     yield json.dumps({"status": "progress", "step": "Estructurando la secuencia metodológica de la sesión..."})
     core_prompt = build_core_prompt(inputs, retrieved_docs)
-    
+
     def generate_core():
         return client.models.generate_content(
-            model="gemini-3.1-flash-lite", # O gemini-1.5-flash
+            model="gemini-3.1-flash-lite",  # O gemini-1.5-flash
             contents=core_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -64,7 +68,7 @@ async def generate_lesson_stream(session_id: str, message: str):
                 temperature=0.7
             )
         )
-    
+
     try:
         response_core = await asyncio.to_thread(generate_core)
         core_plan_json = response_core.text
@@ -72,14 +76,14 @@ async def generate_lesson_stream(session_id: str, message: str):
         update_session_status(session_id, "error")
         yield json.dumps({"status": "error", "message": f"Error en Fase 1: {str(e)}"})
         return
-    
+
     # 4. Fase 2: Recursos
     yield json.dumps({"status": "progress", "step": "Generando fichas de trabajo, juegos y evaluaciones..."})
     resources_prompt = build_resources_prompt(core_plan_json)
 
     def generate_resources():
         return client.models.generate_content(
-            model="gemini-3.1-flash-lite", # O gemini-1.5-flash
+            model="gemini-3.1-flash-lite",  # O gemini-1.5-flash
             contents=resources_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -109,10 +113,12 @@ async def generate_lesson_stream(session_id: str, message: str):
 
     # Guardar en DB
     def save_logs():
-        save_message(session_id, "user", json.dumps(inputs, ensure_ascii=False))
-        save_message(session_id, "bot", json.dumps(final_lesson, ensure_ascii=False))
+        save_message(session_id, "user", json.dumps(
+            inputs, ensure_ascii=False))
+        save_message(session_id, "bot", json.dumps(
+            final_lesson, ensure_ascii=False))
         save_generated_session(session_id, final_lesson)
-    
+
     await asyncio.to_thread(save_logs)
     update_session_status(session_id, "completed")
 
@@ -130,5 +136,3 @@ async def generate_lesson_result(session_id: str, message):
         elif data["status"] == "error":
             result = {"error": data["message"]}
     return result
-
-

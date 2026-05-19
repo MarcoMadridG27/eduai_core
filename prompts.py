@@ -17,15 +17,19 @@ def build_core_prompt(inputs, retrieved_docs):
     ciclo = _as_text(inputs.get("ciclo"))
     contexto = _as_text(inputs.get("contexto"))
     horas_clase = inputs.get("horasClase") or inputs.get("horas_clase") or 2
-    competencias = _as_text(inputs.get("competenciasSeleccionadas") or inputs.get("competencias"))
+    competencias = _as_text(inputs.get(
+        "competenciasSeleccionadas") or inputs.get("competencias"))
     capacidades = _as_text(inputs.get("capacidades"))
-    materiales = _as_text(inputs.get("materialesDisponibles") or inputs.get("materiales"))
+    materiales = _as_text(inputs.get("materialesDisponibles")
+                          or inputs.get("materiales"))
     docente = _as_text(inputs.get("docente"))
     fecha = _as_text(inputs.get("fecha"))
     grado = _as_text(inputs.get("grado"))
     seccion = _as_text(inputs.get("seccion"))
-    enfoque_transversal = _as_text(inputs.get("enfoqueTransversal") or inputs.get("enfoque_transversal"))
-    competencia_transversal = _as_text(inputs.get("competenciaTransversal") or inputs.get("competencia_transversal"))
+    enfoque_transversal = _as_text(inputs.get(
+        "enfoqueTransversal") or inputs.get("enfoque_transversal"))
+    competencia_transversal = _as_text(inputs.get(
+        "competenciaTransversal") or inputs.get("competencia_transversal"))
 
     prompt = (
         "Eres un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "

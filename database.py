@@ -1,6 +1,8 @@
-import sqlite3
 import json
+import sqlite3
+
 from config import DB_NAME
+
 
 def get_db():
     """Devuelve una conexión nueva a la base de datos.
@@ -72,16 +74,19 @@ def _upsert_session_row(session_id, source="frontend", status="draft", input_dat
 
 def save_session_input(session_id, input_data, source="frontend", status="draft"):
     payload = json.dumps(input_data, ensure_ascii=False)
-    _upsert_session_row(session_id, source=source, status=status, input_data=payload)
+    _upsert_session_row(session_id, source=source,
+                        status=status, input_data=payload)
 
 
 def save_generated_session(session_id, generated_data, source="frontend", status="completed"):
     payload = json.dumps(generated_data, ensure_ascii=False)
-    _upsert_session_row(session_id, source=source, status=status, generated_data=payload)
+    _upsert_session_row(session_id, source=source,
+                        status=status, generated_data=payload)
 
 
 def update_session_status(session_id, status, source="frontend"):
     _upsert_session_row(session_id, source=source, status=status)
+
 
 def get_all_sessions_db():
     with get_db() as conn:
@@ -94,7 +99,7 @@ def get_all_sessions_db():
             """
         )
         rows = cursor.fetchall()
-        
+
     sessions = []
     for row in rows:
         input_data = json.loads(row[3]) if row[3] else None

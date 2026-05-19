@@ -1,15 +1,17 @@
-import json
 import asyncio
+import json
 import logging
 import uuid
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse, Response
+from fastapi import (FastAPI, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
-from services import generate_lesson_stream, generate_lesson_result
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from database import init_db, get_session, save_session_input, get_all_sessions_db
+from database import (get_all_sessions_db, get_session, init_db,
+                      save_session_input)
 from knowledge import init_knowledge_base
+from services import generate_lesson_result, generate_lesson_stream
 from utils import normalize_session_input
 
 app = FastAPI(
@@ -20,6 +22,22 @@ app = FastAPI(
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+SESSION_NOT_FOUND_MSG = "Sesión no encontrada"
+
+RESPONSES_404 = {404: {"description": SESSION_NOT_FOUND_MSG}}
+RESPONSES_COMMENT = {
+    400: {"description": "El comentario no puede estar vacío"},
+    404: {"description": SESSION_NOT_FOUND_MSG}
+}
+RESPONSES_GENERATE = {
+    400: {"description": "La sesión no tiene datos de formulario para generar"},
+    500: {"description": "Error interno del generador de IA"}
+}
+RESPONSES_DOWNLOAD = {
+    404: {"description": "La sesión todavía no tiene una versión generada"}
+}
+
 
 
 # Startup tasks: initialize DB and knowledge base off the import path
@@ -38,6 +56,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def home():
@@ -70,7 +89,8 @@ async def read_request_payload(request: Request):
 
 
 def _build_session_filename(session_id: str):
-    safe_session_id = "".join(char for char in session_id if char.isalnum() or char in ("-", "_"))
+    safe_session_id = "".join(
+        char for char in session_id if char.isalnum() or char in ("-", "_"))
     return f"sesion_{safe_session_id or 'session'}.json"
 
 
@@ -81,7 +101,8 @@ async def create_session(request: Request):
     session_id = payload.get("session_id") or str(uuid.uuid4())
     raw_data = payload.get("data", payload)
     normalized_data = normalize_session_input(raw_data or {})
-    save_session_input(session_id, normalized_data, source=payload.get("source", "frontend"), status="draft")
+    save_session_input(session_id, normalized_data, source=payload.get(
+        "source", "frontend"), status="draft")
 
     session = get_session(session_id) or {
         "session_id": session_id,
@@ -104,8 +125,8 @@ async def get_all_sessions():
         # Asegurar que existan campos que espera el front
         # if `is_public` not explicitly false, we'll expose to Repo
         if "is_public" not in session_data:
-            session_data["is_public"] = True 
-            
+            session_data["is_public"] = True
+
         result.append({
             "id": s["session_id"],
             "session_data": session_data,
@@ -115,6 +136,7 @@ async def get_all_sessions():
         })
     return JSONResponse(result)
 
+
 @app.post("/api/sessions/save")
 async def save_session_endpoint(request: Request):
     """Guarda (o publica) la sesión modificada por el usuario."""
@@ -123,29 +145,33 @@ async def save_session_endpoint(request: Request):
     # So the payload will be in payload["session_data"]
     session_data = payload.get("session_data", {})
     user_id = payload.get("user_id", "frontend")
-    session_id = session_data.get("id") or session_data.get("session_id") or str(uuid.uuid4())
-    
+    session_id = session_data.get("id") or session_data.get(
+        "session_id") or str(uuid.uuid4())
+
     # We use save_generated_session since we are saving the final/edited version
-    from database import save_generated_session, _upsert_session_row
     import json
-    
+
+    from database import _upsert_session_row
+
     _upsert_session_row(
-        session_id, 
-        source=user_id, 
-        status="saved", 
+        session_id,
+        source=user_id,
+        status="saved",
         generated_data=json.dumps(session_data, ensure_ascii=False)
     )
     return JSONResponse({"status": "ok", "session_id": session_id})
 
-@app.post("/api/sessions/{session_id}/like")
+
+@app.post("/api/sessions/{session_id}/like", responses=RESPONSES_404)
 async def like_session(session_id: str):
     """Incrementa los likes de una sesión pública."""
-    from database import get_session, _upsert_session_row
     import json
+
+    from database import _upsert_session_row, get_session
 
     session = get_session(session_id)
     if not session or not session.get("generated_data"):
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND_MSG)
 
     data = session["generated_data"]
     likes = data.get("likes", 0) + 1
@@ -159,36 +185,39 @@ async def like_session(session_id: str):
     )
     return JSONResponse({"status": "ok", "likes": likes})
 
-@app.post("/api/sessions/{session_id}/comment")
+
+@app.post("/api/sessions/{session_id}/comment", responses=RESPONSES_COMMENT)
 async def add_comment(session_id: str, request: Request):
     """Añade un comentario a una sesión pública."""
-    from database import get_session, _upsert_session_row
     import json
+
+    from database import _upsert_session_row, get_session
 
     payload = await read_request_payload(request)
     author = payload.get("author", "Anónimo")
     text = payload.get("text", "")
-    
+
     if not text:
-        raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
+        raise HTTPException(
+            status_code=400, detail="El comentario no puede estar vacío")
 
     session = get_session(session_id)
     if not session or not session.get("generated_data"):
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND_MSG)
 
     data = session["generated_data"]
     comments = data.get("comments", [])
-    
+
     import datetime
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    
+
     new_comment = {
         "id": int(datetime.datetime.now().timestamp() * 1000),
         "author": author,
         "text": text,
         "time": now_str
     }
-    
+
     comments.insert(0, new_comment)
     data["comments"] = comments
 
@@ -200,11 +229,12 @@ async def add_comment(session_id: str, request: Request):
     )
     return JSONResponse({"status": "ok", "comment": new_comment})
 
-@app.get("/api/sessions/{session_id}")
+
+@app.get("/api/sessions/{session_id}", responses=RESPONSES_404)
 async def get_session_detail(session_id: str):
     session = get_session(session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND_MSG)
     return JSONResponse(session)
 
 
@@ -214,13 +244,14 @@ async def receive_session_form(session_id: str, request: Request):
     payload = await read_request_payload(request)
     raw_data = payload.get("data", payload)
     normalized_data = normalize_session_input(raw_data)
-    save_session_input(session_id, normalized_data, source=payload.get("source", "frontend"), status="draft")
+    save_session_input(session_id, normalized_data, source=payload.get(
+        "source", "frontend"), status="draft")
 
     session = get_session(session_id)
     return JSONResponse(session)
 
 
-@app.post("/api/sessions/{session_id}/generate")
+@app.post("/api/sessions/{session_id}/generate", responses=RESPONSES_GENERATE)
 async def generate_session(session_id: str, request: Request):
     """Genera la sesión usando los datos guardados o los enviados en esta petición."""
     payload = await read_request_payload(request)
@@ -239,11 +270,13 @@ async def generate_session(session_id: str, request: Request):
     session = get_session(session_id)
     if raw_data:
         normalized_data = normalize_session_input(raw_data)
-        save_session_input(session_id, normalized_data, source=payload.get("source", "frontend"), status="generating")
+        save_session_input(session_id, normalized_data, source=payload.get(
+            "source", "frontend"), status="generating")
     elif session and session.get("input_data"):
         normalized_data = session["input_data"]
     else:
-        raise HTTPException(status_code=400, detail="La sesión no tiene datos de formulario para generar")
+        raise HTTPException(
+            status_code=400, detail="La sesión no tiene datos de formulario para generar")
 
     result = await generate_lesson_result(session_id, normalized_data)
     if "error" in result:
@@ -252,18 +285,19 @@ async def generate_session(session_id: str, request: Request):
     return JSONResponse({"session_id": session_id, "status": "completed", "data": result})
 
 
-@app.get("/api/sessions/{session_id}/download")
+@app.get("/api/sessions/{session_id}/download", responses=RESPONSES_DOWNLOAD)
 async def download_session(session_id: str):
     """Descarga la sesión generada como archivo JSON."""
     session = get_session(session_id)
     if not session or not session.get("generated_data"):
-        raise HTTPException(status_code=404, detail="La sesión todavía no tiene una versión generada")
+        raise HTTPException(
+            status_code=404, detail="La sesión todavía no tiene una versión generada")
 
-    content = json.dumps(session["generated_data"], ensure_ascii=False, indent=2)
-    headers = {"Content-Disposition": f'attachment; filename="{_build_session_filename(session_id)}"'}
+    content = json.dumps(session["generated_data"],
+                         ensure_ascii=False, indent=2)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{_build_session_filename(session_id)}"'}
     return Response(content=content, media_type="application/json; charset=utf-8", headers=headers)
-
-
 
 
 # Nuevo Endpoint de Stream (Server-Sent Events) para el Frontend
@@ -277,7 +311,7 @@ async def generate_stream(session_id: str, message: str):
         async for chunk in generate_lesson_stream(session_id, message):
             # El formato SSE requiere "data: " seguido de los datos y dos saltos de línea
             yield f"data: {chunk}\n\n"
-            
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
@@ -295,10 +329,10 @@ async def websocket_generate(websocket: WebSocket):
         request_data = json.loads(data)
         session_id = request_data.get("session_id", "ws_user")
         message = request_data.get("message", "")
-        
+
         async for chunk in generate_lesson_stream(session_id, message):
             await websocket.send_text(chunk)
-            
+
         await websocket.close()
     except WebSocketDisconnect:
         logger.info("Cliente WebSocket desconectado")

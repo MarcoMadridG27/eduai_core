@@ -1,5 +1,8 @@
-import re
 import json
+import re
+
+DEFAULT_DURATION_TEXT = "2 horas"
+
 
 
 def _split_multi_value(value):
@@ -49,7 +52,7 @@ def parse_teacher_message(message: str):
             "capacidades": "",
             "ciclo": "",
             "contexto": "",
-            "duracion": "2 horas",
+            "duracion": DEFAULT_DURATION_TEXT,
             "enfoque_transversal": "",
             "competencia_transversal": "",
             "materiales": "",
@@ -87,8 +90,8 @@ def parse_teacher_message(message: str):
                 "materials": "materiales",
             }
 
-            out = {v: "" for v in key_map.values()}
-            out["duracion"] = "2 horas"
+            out = dict.fromkeys(key_map.values(), "")
+            out["duracion"] = DEFAULT_DURATION_TEXT
             out["horasClase"] = 2
 
             for k, v in payload.items():
@@ -98,7 +101,8 @@ def parse_teacher_message(message: str):
                     out[mapped] = str(v).strip()
 
             out["tema"] = out.get("titulo", "")
-            out["horasClase"] = parse_duration_hours(out.get("duracion"), default=2)
+            out["horasClase"] = parse_duration_hours(
+                out.get("duracion"), default=2)
 
             return out
     except Exception:
@@ -112,7 +116,7 @@ def parse_teacher_message(message: str):
     ]
 
     # Construir patrón que capture label y su contenido hasta la siguiente etiqueta o EOF
-    labels_pattern = "|".join(re.escape(l) for l in labels)
+    labels_pattern = "|".join(re.escape(lbl) for lbl in labels)
     pattern = re.compile(
         rf"(?ms)^\s*(?P<label>{labels_pattern})\s*:\s*(?P<value>.*?)(?=^\s*(?:{labels_pattern})\s*:|\Z)",
         re.IGNORECASE,
@@ -130,7 +134,7 @@ def parse_teacher_message(message: str):
         "capacidades": "",
         "ciclo": "",
         "contexto": "",
-        "duracion": "2 horas",
+        "duracion": DEFAULT_DURATION_TEXT,
         "enfoque_transversal": "",
         "competencia_transversal": "",
         "materiales": "",
@@ -165,7 +169,8 @@ def parse_teacher_message(message: str):
         normalized["titulo"] = message.strip()
 
     normalized["tema"] = normalized.get("titulo", "")
-    normalized["horasClase"] = parse_duration_hours(normalized.get("duracion"), default=2)
+    normalized["horasClase"] = parse_duration_hours(
+        normalized.get("duracion"), default=2)
 
     return normalized
 
@@ -188,7 +193,7 @@ def normalize_session_input(payload):
             "capacidades": _split_multi_value(parsed.get("capacidades", "")),
             "ciclo": parsed.get("ciclo", ""),
             "contexto": parsed.get("contexto", ""),
-            "duracion": format_duration_text(parsed.get("duracion", "2 horas")),
+            "duracion": format_duration_text(parsed.get("duracion", DEFAULT_DURATION_TEXT)),
             "horasClase": parse_duration_hours(parsed.get("horasClase") or parsed.get("duracion"), default=2),
             "enfoqueTransversal": parsed.get("enfoque_transversal", ""),
             "competenciaTransversal": parsed.get("competencia_transversal", ""),
@@ -198,12 +203,18 @@ def normalize_session_input(payload):
     if not isinstance(payload, dict):
         payload = dict(payload)
 
-    tema = payload.get("tema") or payload.get("titulo") or payload.get("title") or ""
-    competencias = payload.get("competenciasSeleccionadas") or payload.get("competencias") or []
-    capacidades = payload.get("capacidades") or payload.get("capacidadesSeleccionadas") or []
-    materiales = payload.get("materialesDisponibles") or payload.get("materiales") or []
-    duracion = payload.get("duracion") or payload.get("horasClase") or "2 horas"
-    horas_clase = parse_duration_hours(payload.get("horasClase") or duracion, default=2)
+    tema = payload.get("tema") or payload.get(
+        "titulo") or payload.get("title") or ""
+    competencias = payload.get(
+        "competenciasSeleccionadas") or payload.get("competencias") or []
+    capacidades = payload.get("capacidades") or payload.get(
+        "capacidadesSeleccionadas") or []
+    materiales = payload.get(
+        "materialesDisponibles") or payload.get("materiales") or []
+    duracion = payload.get("duracion") or payload.get(
+        "horasClase") or DEFAULT_DURATION_TEXT
+    horas_clase = parse_duration_hours(
+        payload.get("horasClase") or duracion, default=2)
 
     return {
         "tema": str(tema).strip(),
@@ -224,4 +235,3 @@ def normalize_session_input(payload):
         "materialesLista": _split_multi_value(materiales),
         "rawInput": payload,
     }
-
