@@ -6,9 +6,9 @@ import uuid
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from services import generate_lesson_sync, generate_lesson_stream, generate_lesson_result
+from services import generate_lesson_stream, generate_lesson_result
 
-from database import init_db, get_session, save_session_input
+from database import init_db, get_session, save_session_input, get_all_sessions_db
 from knowledge import init_knowledge_base
 from utils import normalize_session_input
 
@@ -94,6 +94,49 @@ async def create_session(request: Request):
     return JSONResponse(session)
 
 
+@app.get("/api/sessions")
+async def get_all_sessions():
+    """Obtiene todas las sesiones agrupadas por el formato requerido para el repositorio del frontend."""
+    sessions = get_all_sessions_db()
+    result = []
+    for s in sessions:
+        session_data = s.get("generated_data") or s.get("input_data") or {}
+        # Asegurar que existan campos que espera el front
+        # if `is_public` not explicitly false, we'll expose to Repo
+        if "is_public" not in session_data:
+            session_data["is_public"] = True 
+            
+        result.append({
+            "id": s["session_id"],
+            "session_data": session_data,
+            "created_at": s["created_at"],
+            "updated_at": s["updated_at"],
+            "user_id": s.get("source", "frontend")
+        })
+    return JSONResponse(result)
+
+@app.post("/api/sessions/save")
+async def save_session_endpoint(request: Request):
+    """Guarda (o publica) la sesión modificada por el usuario."""
+    payload = await read_request_payload(request)
+    # The frontend is sending { user_id, session_data: { is_public, author_name, etc } }
+    # So the payload will be in payload["session_data"]
+    session_data = payload.get("session_data", {})
+    user_id = payload.get("user_id", "frontend")
+    session_id = session_data.get("id") or session_data.get("session_id") or str(uuid.uuid4())
+    
+    # We use save_generated_session since we are saving the final/edited version
+    from database import save_generated_session, _upsert_session_row
+    import json
+    
+    _upsert_session_row(
+        session_id, 
+        source=user_id, 
+        status="saved", 
+        generated_data=json.dumps(session_data, ensure_ascii=False)
+    )
+    return JSONResponse({"status": "ok", "session_id": session_id})
+
 @app.get("/api/sessions/{session_id}")
 async def get_session_detail(session_id: str):
     session = get_session(session_id)
@@ -157,22 +200,7 @@ async def download_session(session_id: str):
     headers = {"Content-Disposition": f'attachment; filename="{_build_session_filename(session_id)}"'}
     return Response(content=content, media_type="application/json; charset=utf-8", headers=headers)
 
-# Webhook tradicional para integraciones simples (ej. WhatsApp)
-@app.post("/webhook")
-async def webhook(request: Request):
-    """
-    Endpoint clásico síncrono. Ideal para bots de WhatsApp o peticiones cURL simples.
-    Espera a que todo el proceso termine y devuelve el JSON final.
-    """
-    form = await request.form()
-    user_message = form.get("Body", "")
-    session_id = form.get("From", "default_user")
 
-    if not user_message:
-        return JSONResponse({"error": "Por favor envía: Tema, Competencia, Grado y Contexto"})
-
-    lesson_plan = generate_lesson_sync(session_id, user_message)
-    return JSONResponse(lesson_plan)
 
 
 # Nuevo Endpoint de Stream (Server-Sent Events) para el Frontend

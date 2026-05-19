@@ -83,6 +83,33 @@ def save_generated_session(session_id, generated_data, source="frontend", status
 def update_session_status(session_id, status, source="frontend"):
     _upsert_session_row(session_id, source=source, status=status)
 
+def get_all_sessions_db():
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT session_id, source, status, input_data, generated_data, created_at, updated_at
+            FROM lesson_sessions
+            ORDER BY created_at DESC
+            """
+        )
+        rows = cursor.fetchall()
+        
+    sessions = []
+    for row in rows:
+        input_data = json.loads(row[3]) if row[3] else None
+        generated_data = json.loads(row[4]) if row[4] else None
+        sessions.append({
+            "session_id": row[0],
+            "source": row[1],
+            "status": row[2],
+            "input_data": input_data,
+            "generated_data": generated_data,
+            "created_at": row[5],
+            "updated_at": row[6],
+        })
+    return sessions
+
 
 def get_session(session_id):
     with get_db() as conn:

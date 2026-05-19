@@ -131,9 +131,4 @@ async def generate_lesson_result(session_id: str, message):
             result = {"error": data["message"]}
     return result
 
-def generate_lesson_sync(session_id: str, message: str):
-    """
-    Función síncrona retrocompatible por si el frontend antiguo (o WhatsApp) sigue llamando
-    al webhook normal. Espera a que termine el stream y devuelve solo el resultado final.
-    """
-    return asyncio.run(generate_lesson_result(session_id, message))
+
