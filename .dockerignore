@@ -1,0 +1,32 @@
+# Ignorar entornos virtuales
+.venv/
+venv/
+env/
+
+# Ignorar caché de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorar bases de datos locales
+*.db
+*.db-journal
+
+# Ignorar archivos de pruebas y cobertura
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+tests/
+
+# Ignorar control de versiones y configuraciones de desarrollo
+.git/
+.gitignore
+.env
+.flake8
+run_sonar_scanner.bat
+sonar-project.properties
+docker-compose.sonar.yml
+Dockerfile
+README.md
