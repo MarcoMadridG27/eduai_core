@@ -111,6 +111,43 @@ async def generate_lesson_stream(session_id: str, message: str):
         yield json.dumps({"status": "error", "message": f"Error parseando JSON final: {str(e)}"})
         return
 
+    # Normalizar y asegurar que 'actividades_previas' exista como lista de strings
+    try:
+        ap = final_lesson.get("actividades_previas")
+        if not ap:
+            # Intentar inferir desde secuenciaMetodologica.inicio
+            sm = final_lesson.get("secuenciaMetodologica") or {}
+            inicio = None
+            if isinstance(sm, dict):
+                inicio = sm.get("inicio")
+            if inicio and isinstance(inicio, str) and inicio.strip():
+                import re
+                items = re.split(r'\n|\.|\s*\d+\.\s*', inicio)
+                cleaned = [s.strip() for s in items if s and s.strip()]
+                final_lesson["actividades_previas"] = cleaned[:3] if cleaned else [
+                    "Preparar materiales disponibles",
+                    "Recordar conceptos previos",
+                    "Organizar al grupo en equipos"
+                ]
+        else:
+            # Si vino como string, convertir a lista
+            if isinstance(ap, str):
+                import re
+                items = re.split(r'\n|\s*\d+\.\s*', ap)
+                final_lesson["actividades_previas"] = [s.strip() for s in items if s and s.strip()]
+            elif isinstance(ap, list):
+                # limpieza básica
+                final_lesson["actividades_previas"] = [str(x).strip() for x in ap if str(x).strip()]
+            else:
+                final_lesson["actividades_previas"] = [str(ap)]
+    except Exception:
+        # Como último recurso, asegurar un fallback mínimo
+        final_lesson.setdefault("actividades_previas", [
+            "Preparar materiales disponibles",
+            "Recordar conceptos previos",
+            "Organizar al grupo en equipos"
+        ])
+
     # Guardar en DB
     def save_logs():
         save_message(session_id, "user", json.dumps(
