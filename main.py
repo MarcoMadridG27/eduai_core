@@ -103,6 +103,16 @@ def _compose_session_data(session_row: dict) -> dict:
         if key not in session_data or session_data[key] in (None, "", [], {}):
             session_data[key] = value
 
+    datos_generales = dict(session_data.get("datosGenerales") or {})
+    for key in ("titulo", "docente", "fecha", "grado", "seccion", "area", "unidad", "sesion_num", "ie", "ugel", "lugar", "duracion", "ciclo"):
+        if key in session_data and key not in datos_generales and session_data[key] not in (None, "", [], {}):
+            datos_generales[key] = session_data[key]
+        elif key in input_data and key not in datos_generales and input_data[key] not in (None, "", [], {}):
+            datos_generales[key] = input_data[key]
+
+    if datos_generales:
+        session_data["datosGenerales"] = datos_generales
+
     if "is_public" not in session_data:
         session_data["is_public"] = True
 
