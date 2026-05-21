@@ -8,11 +8,12 @@ from fastapi import (FastAPI, HTTPException, Request, WebSocket,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from database import (get_all_sessions_db, get_session, init_db,
-                      save_session_input)
+from database import (get_all_sessions_db, get_session, init_db, save_session_input)
 from knowledge import init_knowledge_base
 from services import generate_lesson_result, generate_lesson_stream
 from utils import normalize_session_input
+from webhook import router as whatsapp_router
+app.include_router(whatsapp_router)
 
 app = FastAPI(
     title="Generador de Sesiones Educativas",
@@ -94,6 +95,20 @@ def _build_session_filename(session_id: str):
     return f"sesion_{safe_session_id or 'session'}.json"
 
 
+def _compose_session_data(session_row: dict) -> dict:
+    session_data = dict(session_row.get("generated_data") or {})
+    input_data = session_row.get("input_data") or {}
+
+    for key, value in input_data.items():
+        if key not in session_data or session_data[key] in (None, "", [], {}):
+            session_data[key] = value
+
+    if "is_public" not in session_data:
+        session_data["is_public"] = True
+
+    return session_data
+
+
 @app.post("/api/sessions")
 async def create_session(request: Request):
     """Crea una sesión y, si viene información inicial, la guarda."""
@@ -121,11 +136,7 @@ async def get_all_sessions():
     sessions = get_all_sessions_db()
     result = []
     for s in sessions:
-        session_data = s.get("generated_data") or s.get("input_data") or {}
-        # Asegurar que existan campos que espera el front
-        # if `is_public` not explicitly false, we'll expose to Repo
-        if "is_public" not in session_data:
-            session_data["is_public"] = True
+        session_data = _compose_session_data(s)
 
         result.append({
             "id": s["session_id"],

@@ -49,6 +49,7 @@ def build_core_prompt(inputs, retrieved_docs):
         '  "competenciasSeleccionadas": ["string"],\n'
         '  "capacidades": ["string"],\n'
         '  "materialesDisponibles": "string",\n'
+        '  "actividades_previas": ["string"],\n'
         '  "competenciaDescripcion": "string",\n'
         '  "criteriosEvaluacion": "string",\n'
         '  "evidenciasAprendizaje": "string",\n'
@@ -84,7 +85,8 @@ def build_core_prompt(inputs, retrieved_docs):
 
     prompt += (
         "\nGenera una sesión completa, pedagógicamente sólida y realista. "
-        "Asegúrate de que `horasClase` sea numérico y que las listas sean arrays JSON válidos."
+        "Asegúrate de que `horasClase` sea numérico y que las listas sean arrays JSON válidos. "
+        "Incluye `actividades_previas` como una lista breve y concreta de acciones antes de la sesión."
     )
     return prompt
 

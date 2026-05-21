@@ -62,6 +62,7 @@ class CoreLessonPlan(BaseModel):
     competenciasSeleccionadas: List[str]
     capacidades: List[str]
     materialesDisponibles: str
+    actividades_previas: List[str]
     competenciaDescripcion: str
     criteriosEvaluacion: str
     evidenciasAprendizaje: str
