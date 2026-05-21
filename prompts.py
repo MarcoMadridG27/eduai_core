@@ -86,7 +86,9 @@ def build_core_prompt(inputs, retrieved_docs):
     prompt += (
         "\nGenera una sesión completa, pedagógicamente sólida y realista. "
         "Asegúrate de que `horasClase` sea numérico y que las listas sean arrays JSON válidos. "
-        "Incluye `actividades_previas` como una lista breve y concreta de acciones antes de la sesión."
+        "Incluye `actividades_previas` como una lista breve y concreta de acciones antes de la sesión. "
+        "No la dejes vacía: si no hay instrucciones explícitas, infiere 3 a 5 acciones previas a partir del contexto, "
+        "las competencias, las capacidades y los materiales disponibles."
     )
     return prompt
 
