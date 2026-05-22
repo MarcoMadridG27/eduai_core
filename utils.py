@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 
 DEFAULT_DURATION_TEXT = "2 horas"
 
@@ -175,6 +176,43 @@ def parse_teacher_message(message: str):
     return normalized
 
 
+def format_date_peru(value):
+    """Convierte varias representaciones de fecha a formato DD/MM/YYYY (Perú).
+
+    Acepta formatos comunes: ISO YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, DD/MM/YYYY, etc.
+    Si no puede parsear, intenta extraer con regex. Devuelve cadena vacía si no hay valor.
+    """
+    if not value:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    s = str(value).strip()
+    if not s:
+        return ""
+    # Manejar ISO con Z
+    try:
+        s2 = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s2)
+        return dt.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    # Intents with common formats
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%d/%m/%Y")
+        except Exception:
+            continue
+    # Fallback regex
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", s)
+    if m:
+        return f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    m2 = re.search(r"(\d{2})/(\d{2})/(\d{4})", s)
+    if m2:
+        return s
+    return s
+
+
 def normalize_session_input(payload):
     """Normaliza payloads de frontend, JSON o texto libre al contrato interno."""
     if payload is None:
@@ -186,7 +224,7 @@ def normalize_session_input(payload):
             "tema": parsed.get("tema") or parsed.get("titulo", ""),
             "titulo": parsed.get("tema") or parsed.get("titulo", ""),
             "docente": parsed.get("docente", ""),
-            "fecha": parsed.get("fecha", ""),
+            "fecha": format_date_peru(parsed.get("fecha", "")),
             "grado": parsed.get("grado", ""),
             "seccion": parsed.get("seccion", ""),
             "competenciasSeleccionadas": _split_multi_value(parsed.get("competencias", "")),
@@ -220,7 +258,7 @@ def normalize_session_input(payload):
         "tema": str(tema).strip(),
         "titulo": str(tema).strip(),
         "docente": str(payload.get("docente", "")).strip(),
-        "fecha": str(payload.get("fecha", "")).strip(),
+        "fecha": format_date_peru(str(payload.get("fecha", "")).strip()),
         "grado": str(payload.get("grado", "")).strip(),
         "seccion": str(payload.get("seccion", "")).strip(),
         "competenciasSeleccionadas": _split_multi_value(competencias),
