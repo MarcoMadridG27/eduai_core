@@ -64,6 +64,7 @@ class CoreLessonPlan(BaseModel):
     materialesDisponibles: str
     actividades_previas: List[str]
     competenciaDescripcion: str
+    desempenos: List[str]
     criteriosEvaluacion: str
     evidenciasAprendizaje: str
     propositoSesion: str
@@ -72,6 +73,7 @@ class CoreLessonPlan(BaseModel):
     procesosDidacticos: List[str]
     actividadesContextualizadas: List[str]
     materialesDidacticosSugeridos: List[str]
+    actitudes_observables: str
 
 
 class FichaTrabajo(BaseModel):

@@ -51,6 +51,7 @@ def build_core_prompt(inputs, retrieved_docs):
         '  "materialesDisponibles": "string",\n'
         '  "actividades_previas": ["string"],\n'
         '  "competenciaDescripcion": "string",\n'
+        '  "desempenos": ["string"],\n'
         '  "criteriosEvaluacion": "string",\n'
         '  "evidenciasAprendizaje": "string",\n'
         '  "propositoSesion": "string",\n'
@@ -58,7 +59,8 @@ def build_core_prompt(inputs, retrieved_docs):
         '  "distribucionHoras": "string",\n'
         '  "procesosDidacticos": ["string"],\n'
         '  "actividadesContextualizadas": ["string"],\n'
-        '  "materialesDidacticosSugeridos": ["string"]\n'
+        '  "materialesDidacticosSugeridos": ["string"],\n'
+        '  "actitudes_observables": "string"\n'
         "}\n\n"
         "Datos de entrada:\n"
         f"- Tema: {tema}\n"
@@ -88,7 +90,9 @@ def build_core_prompt(inputs, retrieved_docs):
         "Asegúrate de que `horasClase` sea numérico y que las listas sean arrays JSON válidos. "
         "Incluye `actividades_previas` como una lista breve y concreta de acciones antes de la sesión. "
         "No la dejes vacía: si no hay instrucciones explícitas, infiere 3 a 5 acciones previas a partir del contexto, "
-        "las competencias, las capacidades y los materiales disponibles."
+        "las competencias, las capacidades y los materiales disponibles. "
+        "Incluye `desempenos` como una lista breve de desempeños por grado coherentes con la competencia y capacidades. "
+        "Incluye `actitudes_observables` como una descripción breve y concreta de actitudes o acciones observables alineadas al enfoque transversal."
     )
     return prompt
 

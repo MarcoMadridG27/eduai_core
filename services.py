@@ -140,6 +140,28 @@ async def generate_lesson_stream(session_id: str, message: str):
                 final_lesson["actividades_previas"] = [str(x).strip() for x in ap if str(x).strip()]
             else:
                 final_lesson["actividades_previas"] = [str(ap)]
+
+        desempenos = final_lesson.get("desempenos")
+        if not desempenos:
+            competencia_desc = final_lesson.get("competenciaDescripcion") or ""
+            if isinstance(competencia_desc, str) and competencia_desc.strip():
+                import re
+                items = re.split(r'\n|\s*\d+\.\s*|\.\s+', competencia_desc)
+                cleaned = [s.strip() for s in items if s and s.strip()]
+                final_lesson["desempenos"] = cleaned[:4] if cleaned else [competencia_desc.strip()]
+            else:
+                final_lesson["desempenos"] = [
+                    "Resuelve la situación problemática usando estrategias pertinentes.",
+                    "Explica y justifica el procedimiento seguido con lenguaje matemático.",
+                    "Verifica sus resultados y corrige errores si es necesario."
+                ]
+
+        if not final_lesson.get("actitudes_observables"):
+            competencia_transversal = inputs.get("competenciaTransversal") or inputs.get("competencia_transversal") or ""
+            enfoque_transversal = inputs.get("enfoqueTransversal") or inputs.get("enfoque_transversal") or ""
+            final_lesson["actitudes_observables"] = competencia_transversal or enfoque_transversal or (
+                "Participa activamente, escucha con respeto y colabora con su grupo."
+            )
     except Exception:
         # Como último recurso, asegurar un fallback mínimo
         final_lesson.setdefault("actividades_previas", [
@@ -147,6 +169,12 @@ async def generate_lesson_stream(session_id: str, message: str):
             "Recordar conceptos previos",
             "Organizar al grupo en equipos"
         ])
+        final_lesson.setdefault("desempenos", [
+            "Resuelve la situación problemática usando estrategias pertinentes.",
+            "Explica y justifica el procedimiento seguido con lenguaje matemático.",
+            "Verifica sus resultados y corrige errores si es necesario."
+        ])
+        final_lesson.setdefault("actitudes_observables", "Participa activamente, escucha con respeto y colabora con su grupo.")
 
     # Guardar en DB
     def save_logs():
