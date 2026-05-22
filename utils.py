@@ -1,6 +1,7 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 DEFAULT_DURATION_TEXT = "2 horas"
 
@@ -185,7 +186,16 @@ def format_date_peru(value):
     if not value:
         return ""
     if isinstance(value, datetime):
-        return value.strftime("%d/%m/%Y")
+        # Ensure datetime is represented in PET (America/Lima, UTC-5)
+        try:
+            lima = ZoneInfo("America/Lima")
+            if value.tzinfo is None:
+                # assume UTC for naive datetimes
+                value = value.replace(tzinfo=timezone.utc)
+            value = value.astimezone(lima)
+            return value.strftime("%d/%m/%Y")
+        except Exception:
+            return value.strftime("%d/%m/%Y")
     s = str(value).strip()
     if not s:
         return ""
@@ -193,6 +203,10 @@ def format_date_peru(value):
     try:
         s2 = s.replace("Z", "+00:00")
         dt = datetime.fromisoformat(s2)
+        lima = ZoneInfo("America/Lima")
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(lima)
         return dt.strftime("%d/%m/%Y")
     except Exception:
         pass
