@@ -34,10 +34,11 @@ def build_core_prompt(inputs, retrieved_docs):
 
     prompt = (
         "Eres un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "
+        f"Tu tarea principal es diseñar y redactar una sesión de aprendizaje sumamente completa e interactiva redactada NATIVAMENTE y de forma EXCLUSIVA en {idioma.upper()}.\n"
         "Debes devolver SOLO un JSON válido, sin markdown ni texto adicional.\n\n"
         "Requisitos obligatorios:\n"
-        f"- Idioma obligatorio de redacción de todo el contenido textual (secuencia didáctica, criterios de evaluación, propósito de sesión, etc.): {idioma}. Todo el texto generado por la IA DEBE estar redactado íntegramente en {idioma}.\n"
-        f"- Claves del JSON de salida: Las claves del objeto JSON resultante (ej. 'tema', 'ciclo', 'secuenciaMetodologica', 'inicio', 'desarrollo', 'cierre', etc.) DEBEN permanecer exactamente en español, idénticas al contrato de salida. ÚNICAMENTE traduce el contenido textual de los valores.\n"
+        f"- Idioma de redacción: Todo el contenido de todos los campos textuales del JSON de salida (como propósitoSesion, criteriosEvaluacion, evidenciasAprendizaje, secuenciaMetodologica (inicio, desarrollo, cierre), actividadesContextualizadas, etc.) DEBE estar escrito estrictamente en el idioma {idioma.upper()}. Está terminantemente prohibido usar español u otros idiomas para los valores textuales.\n"
+        f"- Claves del JSON: Las claves del objeto JSON resultante (ej. 'tema', 'ciclo', 'secuenciaMetodologica', 'inicio', 'desarrollo', 'cierre', etc.) deben permanecer en español tal como se definen en el contrato de salida. ÚNICAMENTE traduce el contenido textual de los valores.\n"
         "- Coherencia pedagógica entre competencias, capacidades, propósito, evaluación y actividades.\n"
         "- Contextualización real al entorno indicado.\n"
         "- Usa la cantidad de horas clase indicada y distribúyelas de forma realista.\n"
@@ -97,17 +98,16 @@ def build_core_prompt(inputs, retrieved_docs):
         "Incluye `actitudes_observables` como una descripción breve y concreta de actitudes o acciones observables alineadas al enfoque transversal."
     )
     return prompt
-
-
 def build_resources_prompt(core_plan_json, idioma="español"):
     """
     Construye el prompt para la segunda fase: Generación de recursos complementarios.
     """
     prompt = (
         "Basado estrictamente en el siguiente Plan de Sesión de Aprendizaje, genera los Recursos Adicionales solicitados "
-        "para complementar la clase. Asegúrate de que las actividades estén conectadas con el propósito y el contexto.\n\n"
+        f"para complementar la clase redactados NATIVAMENTE y de forma EXCLUSIVA en {idioma.upper()}.\n"
+        "Asegúrate de que las actividades estén conectadas con el propósito y el contexto.\n\n"
         "Requisitos obligatorios:\n"
-        f"- Idioma obligatorio de redacción de todo el contenido textual (instrucciones, enunciados, comunicados, etc.): {idioma}. Todo el texto generado por la IA DEBE estar redactado íntegramente en {idioma}.\n"
+        f"- Idioma obligatorio de redacción: Todo el contenido textual de los recursos (ej. instrucciones, enunciados de problemas, dinámicas de juegos, preguntas, opciones de respuestas, comunicado para padres, etc.) DEBE estar escrito estrictamente en el idioma {idioma.upper()}. Está terminantemente prohibido usar español u otros idiomas para los valores textuales.\n"
         f"- Claves del JSON de salida: Las claves del objeto JSON resultante (ej. 'fichasDeTrabajo', 'problemasYEjercicios', 'juegoDidactico', 'comunicadoParaPadres', etc.) DEBEN permanecer exactamente en español, idénticas al esquema esperado. ÚNICAMENTE traduce el contenido de los valores.\n\n"
         f"PLAN DE SESIÓN:\n{core_plan_json}\n\n"
         "Debes generar:\n"

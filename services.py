@@ -51,7 +51,14 @@ async def generate_lesson_stream(session_id: str, message: str):
         yield json.dumps({"status": "error", "message": "API Key de Gemini no configurada correctamente"})
         return
 
-    system_instruction = "Actúa como un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU."
+    idioma_req = inputs.get("idioma", "español")
+    system_instruction = (
+        "Actúa como un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "
+        f"IMPORTANTE: El usuario ha solicitado redactar esta sesión completamente en '{idioma_req}'. "
+        f"Por lo tanto, DEBES redactar todo el contenido textual de los valores del JSON únicamente en el idioma '{idioma_req}', "
+        "de manera gramaticalmente correcta, natural y con alta calidad pedagógica. "
+        "Las claves del JSON de salida deben permanecer tal cual en español."
+    )
 
     # 3. Fase 1: Core Plan
     yield json.dumps({"status": "progress", "step": "Estructurando la secuencia metodológica de la sesión..."})
@@ -113,6 +120,57 @@ async def generate_lesson_stream(session_id: str, message: str):
 
     # Normalizar y asegurar que 'actividades_previas' exista como lista de strings
     try:
+        # Determinar fallbacks localizados
+        lang_key = str(inputs.get("idioma", "español")).lower()
+        if "ingl" in lang_key or "en" == lang_key:
+            fallback_ap = [
+                "Prepare available materials",
+                "Recall prior concepts",
+                "Organize the group into teams"
+            ]
+            fallback_des = [
+                "Solves the problematic situation using relevant strategies.",
+                "Explains and justifies the procedure followed with mathematical language.",
+                "Verifies their results and corrects errors if necessary."
+            ]
+            fallback_act = "Participates actively, listens with respect, and cooperates with their group."
+        elif "quechua" in lang_key or "qu" == lang_key:
+            fallback_ap = [
+                "Tupachiy yachana imakuna",
+                "Yuyariy ñawpa yachaykunata",
+                "T'aqaman yachaqkunata allichay"
+            ]
+            fallback_des = [
+                "Allichan yachay sasachakuyta allin yachaykunawan.",
+                "Sut'inchan churanpas ruraykunata yupay yachay rimasqawan.",
+                "Qhawarin rurasqan allin kasqanta hinallataq pantasqakunatapas pantachin."
+            ]
+            fallback_act = "Allin yuyaywan ruran, hukkunata uyarin hinallataq t'aqanwan llank'an."
+        elif "aymara" in lang_key or "ay" == lang_key:
+            fallback_ap = [
+                "Yatichawi yänaka wakichaña",
+                "Nayra yatichäwita amtaña",
+                "Tama yatirinaka wakichaña"
+            ]
+            fallback_des = [
+                "Jan walt'awi walt'ayi yatxataña walt'awinakampi.",
+                "Qhanañchi lurañanakapata yatxatata arukiptawi.",
+                "Uñji aski lurata ukatxa pantasqanaka chiqpachañani."
+            ]
+            fallback_act = "Ch'amampi chikañasi, yäpampi ist'i ukatxa tamapampi irnaqi."
+        else:
+            fallback_ap = [
+                "Preparar materiales disponibles",
+                "Recordar conceptos previos",
+                "Organizar al grupo en equipos"
+            ]
+            fallback_des = [
+                "Resuelve la situación problemática usando estrategias pertinentes.",
+                "Explica y justifica el procedimiento seguido con lenguaje matemático.",
+                "Verifica sus resultados y corrige errores si es necesario."
+            ]
+            fallback_act = "Participa activamente, escucha con respeto y colabora con su grupo."
+
         ap = final_lesson.get("actividades_previas")
         if not ap:
             # Intentar inferir desde secuenciaMetodologica.inicio
@@ -124,11 +182,9 @@ async def generate_lesson_stream(session_id: str, message: str):
                 import re
                 items = re.split(r'\n|\.|\s*\d+\.\s*', inicio)
                 cleaned = [s.strip() for s in items if s and s.strip()]
-                final_lesson["actividades_previas"] = cleaned[:3] if cleaned else [
-                    "Preparar materiales disponibles",
-                    "Recordar conceptos previos",
-                    "Organizar al grupo en equipos"
-                ]
+                final_lesson["actividades_previas"] = cleaned[:3] if cleaned else fallback_ap
+            else:
+                final_lesson["actividades_previas"] = fallback_ap
         else:
             # Si vino como string, convertir a lista
             if isinstance(ap, str):
@@ -150,31 +206,17 @@ async def generate_lesson_stream(session_id: str, message: str):
                 cleaned = [s.strip() for s in items if s and s.strip()]
                 final_lesson["desempenos"] = cleaned[:4] if cleaned else [competencia_desc.strip()]
             else:
-                final_lesson["desempenos"] = [
-                    "Resuelve la situación problemática usando estrategias pertinentes.",
-                    "Explica y justifica el procedimiento seguido con lenguaje matemático.",
-                    "Verifica sus resultados y corrige errores si es necesario."
-                ]
+                final_lesson["desempenos"] = fallback_des
 
         if not final_lesson.get("actitudes_observables"):
             competencia_transversal = inputs.get("competenciaTransversal") or inputs.get("competencia_transversal") or ""
             enfoque_transversal = inputs.get("enfoqueTransversal") or inputs.get("enfoque_transversal") or ""
-            final_lesson["actitudes_observables"] = competencia_transversal or enfoque_transversal or (
-                "Participa activamente, escucha con respeto y colabora con su grupo."
-            )
+            final_lesson["actitudes_observables"] = competencia_transversal or enfoque_transversal or fallback_act
     except Exception:
         # Como último recurso, asegurar un fallback mínimo
-        final_lesson.setdefault("actividades_previas", [
-            "Preparar materiales disponibles",
-            "Recordar conceptos previos",
-            "Organizar al grupo en equipos"
-        ])
-        final_lesson.setdefault("desempenos", [
-            "Resuelve la situación problemática usando estrategias pertinentes.",
-            "Explica y justifica el procedimiento seguido con lenguaje matemático.",
-            "Verifica sus resultados y corrige errores si es necesario."
-        ])
-        final_lesson.setdefault("actitudes_observables", "Participa activamente, escucha con respeto y colabora con su grupo.")
+        final_lesson.setdefault("actividades_previas", fallback_ap)
+        final_lesson.setdefault("desempenos", fallback_des)
+        final_lesson.setdefault("actitudes_observables", fallback_act)
 
     # Guardar en DB
     def save_logs():
