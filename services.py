@@ -79,7 +79,7 @@ async def generate_lesson_stream(session_id: str, message: str):
 
     # 4. Fase 2: Recursos
     yield json.dumps({"status": "progress", "step": "Generando fichas de trabajo, juegos y evaluaciones..."})
-    resources_prompt = build_resources_prompt(core_plan_json)
+    resources_prompt = build_resources_prompt(core_plan_json, inputs.get("idioma", "español"))
 
     def generate_resources():
         return client.models.generate_content(

@@ -30,12 +30,14 @@ def build_core_prompt(inputs, retrieved_docs):
         "enfoqueTransversal") or inputs.get("enfoque_transversal"))
     competencia_transversal = _as_text(inputs.get(
         "competenciaTransversal") or inputs.get("competencia_transversal"))
+    idioma = _as_text(inputs.get("idioma") or "español")
 
     prompt = (
         "Eres un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "
         "Debes devolver SOLO un JSON válido, sin markdown ni texto adicional.\n\n"
         "Requisitos obligatorios:\n"
-        "- Idioma: español.\n"
+        f"- Idioma obligatorio de redacción de todo el contenido textual (secuencia didáctica, criterios de evaluación, propósito de sesión, etc.): {idioma}. Todo el texto generado por la IA DEBE estar redactado íntegramente en {idioma}.\n"
+        f"- Claves del JSON de salida: Las claves del objeto JSON resultante (ej. 'tema', 'ciclo', 'secuenciaMetodologica', 'inicio', 'desarrollo', 'cierre', etc.) DEBEN permanecer exactamente en español, idénticas al contrato de salida. ÚNICAMENTE traduce el contenido textual de los valores.\n"
         "- Coherencia pedagógica entre competencias, capacidades, propósito, evaluación y actividades.\n"
         "- Contextualización real al entorno indicado.\n"
         "- Usa la cantidad de horas clase indicada y distribúyelas de forma realista.\n"
@@ -97,13 +99,16 @@ def build_core_prompt(inputs, retrieved_docs):
     return prompt
 
 
-def build_resources_prompt(core_plan_json):
+def build_resources_prompt(core_plan_json, idioma="español"):
     """
     Construye el prompt para la segunda fase: Generación de recursos complementarios.
     """
     prompt = (
         "Basado estrictamente en el siguiente Plan de Sesión de Aprendizaje, genera los Recursos Adicionales solicitados "
         "para complementar la clase. Asegúrate de que las actividades estén conectadas con el propósito y el contexto.\n\n"
+        "Requisitos obligatorios:\n"
+        f"- Idioma obligatorio de redacción de todo el contenido textual (instrucciones, enunciados, comunicados, etc.): {idioma}. Todo el texto generado por la IA DEBE estar redactado íntegramente en {idioma}.\n"
+        f"- Claves del JSON de salida: Las claves del objeto JSON resultante (ej. 'fichasDeTrabajo', 'problemasYEjercicios', 'juegoDidactico', 'comunicadoParaPadres', etc.) DEBEN permanecer exactamente en español, idénticas al esquema esperado. ÚNICAMENTE traduce el contenido de los valores.\n\n"
         f"PLAN DE SESIÓN:\n{core_plan_json}\n\n"
         "Debes generar:\n"
         "1. Fichas de trabajo con niveles progresivos.\n"

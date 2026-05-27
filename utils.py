@@ -90,11 +90,14 @@ def parse_teacher_message(message: str):
                 "competencia transversal": "competencia_transversal",
                 "materiales": "materiales",
                 "materials": "materiales",
+                "idioma": "idioma",
+                "language": "idioma",
             }
 
             out = dict.fromkeys(key_map.values(), "")
             out["duracion"] = DEFAULT_DURATION_TEXT
             out["horasClase"] = 2
+            out["idioma"] = "español"
 
             for k, v in payload.items():
                 k_low = str(k).strip().lower()
@@ -114,7 +117,7 @@ def parse_teacher_message(message: str):
     labels = [
         "Título", "Titulo", "Docente", "Fecha", "Grado", "Sección", "Seccion",
         "Competencias", "Capacidades", "Ciclo", "Contexto", "Duración", "Duracion",
-        "Enfoque Transversal", "Competencia Transversal", "Materiales"
+        "Enfoque Transversal", "Competencia Transversal", "Materiales", "Idioma", "Language"
     ]
 
     # Construir patrón que capture label y su contenido hasta la siguiente etiqueta o EOF
@@ -141,6 +144,7 @@ def parse_teacher_message(message: str):
         "competencia_transversal": "",
         "materiales": "",
         "horasClase": 2,
+        "idioma": "español",
     }
 
     label_map = {
@@ -157,6 +161,8 @@ def parse_teacher_message(message: str):
         "enfoque transversal": "enfoque_transversal",
         "competencia transversal": "competencia_transversal",
         "materiales": "materiales",
+        "idioma": "idioma",
+        "language": "idioma",
     }
 
     for m in matches:
@@ -250,6 +256,7 @@ def normalize_session_input(payload):
             "enfoqueTransversal": parsed.get("enfoque_transversal", ""),
             "competenciaTransversal": parsed.get("competencia_transversal", ""),
             "materialesDisponibles": parsed.get("materiales", ""),
+            "idioma": parsed.get("idioma", "español"),
         }
 
     if not isinstance(payload, dict):
@@ -285,5 +292,6 @@ def normalize_session_input(payload):
         "competenciaTransversal": str(payload.get("competenciaTransversal") or payload.get("competencia_transversal") or "").strip(),
         "materialesDisponibles": ", ".join(_split_multi_value(materiales)),
         "materialesLista": _split_multi_value(materiales),
+        "idioma": str(payload.get("idioma") or payload.get("language") or "español").strip(),
         "rawInput": payload,
     }
