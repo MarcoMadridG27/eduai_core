@@ -12,14 +12,14 @@ from database import (get_all_sessions_db, get_session, init_db, save_session_in
 from knowledge import init_knowledge_base
 from services import generate_lesson_result, generate_lesson_stream
 from utils import normalize_session_input
-from webhook import router as whatsapp_router
-app.include_router(whatsapp_router)
-
 app = FastAPI(
     title="Generador de Sesiones Educativas",
     description="API para generar sesiones con Structured Outputs y WebSockets",
     version="2.0.0"
 )
+
+from webhook import router as whatsapp_router
+app.include_router(whatsapp_router)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,7 +46,8 @@ RESPONSES_DOWNLOAD = {
 async def startup():
     logger.info("Startup: inicializando base de datos y base de conocimientos")
     await asyncio.to_thread(init_db)
-    await asyncio.to_thread(init_knowledge_base)
+    # await asyncio.to_thread(init_knowledge_base)
+
 
 # --- CORS Middleware ---
 origins = ["*"]  # Ajusta en producción
