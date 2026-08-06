@@ -46,7 +46,7 @@ RESPONSES_DOWNLOAD = {
 async def startup():
     logger.info("Startup: inicializando base de datos y base de conocimientos")
     await asyncio.to_thread(init_db)
-    # await asyncio.to_thread(init_knowledge_base)
+    await asyncio.to_thread(init_knowledge_base)
 
 
 # --- CORS Middleware ---
