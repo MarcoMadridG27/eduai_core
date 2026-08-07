@@ -1,0 +1,66 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────
+# EduAI Core — Producción EC2
+# Servicios: Qdrant (vector DB) + eduai_core (API)
+#
+# Uso:
+#   docker compose -f docker-compose.yml up -d
+#
+# Indexar PDFs (UNA VEZ, antes de levantar el servicio):
+#   docker compose run --rm eduai_core python scripts/index_documents.py
+# ──────────────────────────────────────────────
+
+services:
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.7
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC (opcional)
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/readyz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  eduai_core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eduai_core
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    environment:
+      # Gemini
+      GOOGLE_API_KEY: "${GOOGLE_API_KEY}"
+      # Voyage AI (Embeddings)
+      VOYAGE_API_KEY: "${VOYAGE_API_KEY}"
+      # Qdrant — apunta al servicio Docker por nombre
+      QDRANT_URL: "http://qdrant:6333"
+      QDRANT_API_KEY: ""
+      # Langfuse (Observabilidad — opcional)
+      LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY:-}"
+      LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY:-}"
+      LANGFUSE_HOST: "${LANGFUSE_HOST:-https://cloud.langfuse.com}"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    volumes:
+      # PDFs del MINEDU (montar en producción para que el script de indexación los lea)
+      - ./pdfs:/app/pdfs:ro
+      # Base de datos SQLite persistente
+      - sqlite_data:/app/data
+
+volumes:
+  qdrant_storage:
+    driver: local
+  sqlite_data:
+    driver: local

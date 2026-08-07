@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from database import (get_all_sessions_db, get_session, init_db, save_session_input)
-from knowledge import init_knowledge_base
 from services import generate_lesson_result, generate_lesson_stream
 from utils import normalize_session_input
 app = FastAPI(
@@ -44,12 +43,34 @@ RESPONSES_DOWNLOAD = {
 
 
 
-# Startup tasks: initialize DB and knowledge base off the import path
 @app.on_event("startup")
 async def startup():
-    logger.info("Startup: inicializando base de datos y base de conocimientos")
+    logger.info("Startup: inicializando base de datos")
     await asyncio.to_thread(init_db)
-    await asyncio.to_thread(init_knowledge_base)
+
+    # Verificar conectividad con Qdrant de forma no bloqueante
+    async def _check_qdrant():
+        try:
+            from rag.retriever import _get_client
+            client = _get_client()
+            collections = client.get_collections().collections
+            names = [c.name for c in collections]
+            if "curriculum_documents" in names:
+                from rag.indexer import COLLECTION_NAME
+                info = client.get_collection(COLLECTION_NAME)
+                logger.info(
+                    "Qdrant OK. Coleccion '%s': %d puntos indexados.",
+                    COLLECTION_NAME, info.points_count
+                )
+            else:
+                logger.warning(
+                    "Coleccion 'curriculum_documents' no encontrada en Qdrant. "
+                    "Ejecuta: python scripts/index_documents.py"
+                )
+        except Exception as e:
+            logger.warning("Qdrant no disponible en este entorno: %s", e)
+
+    await _check_qdrant()
 
 
 # --- CORS Middleware ---

@@ -1,15 +1,36 @@
 import asyncio
 import json
+import logging
+import time
 
 from google.genai import types
 
-from config import client
+from config import (
+    LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, client
+)
 from database import (save_generated_session, save_message, save_session_input,
                       update_session_status)
-from knowledge import embed_fn, knowledge_db
 from prompts import build_core_prompt, build_resources_prompt
+from rag.retriever import search as rag_search
 from schemas import CoreLessonPlan, RecursosAdicionales
 from utils import normalize_session_input
+
+logger = logging.getLogger(__name__)
+
+
+def _get_langfuse():
+    """Retorna cliente Langfuse si está configurado, si no None."""
+    if LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY:
+        try:
+            from langfuse import Langfuse
+            return Langfuse(
+                secret_key=LANGFUSE_SECRET_KEY,
+                public_key=LANGFUSE_PUBLIC_KEY,
+                host=LANGFUSE_HOST,
+            )
+        except Exception as e:
+            logger.warning("Langfuse no disponible: %s", e)
+    return None
 
 # ========================
 # Lógica de Negocio (Chaining & Streaming)
@@ -28,23 +49,43 @@ async def generate_lesson_stream(session_id: str, message: str):
     update_session_status(session_id, "generating")
     await asyncio.sleep(0.5)
 
-    # 2. Buscar en Vector DB
+    # 2. Buscar en Qdrant con filtros por nivel, grado y área
     yield json.dumps({"status": "progress", "step": "Buscando contexto en el Currículo Nacional..."})
+    rag_start = time.time()
+
+    # Construir query textual para embedding
     query_parts = [
         inputs.get("tema", ""),
         ", ".join(inputs.get("competenciasSeleccionadas", [])),
         ", ".join(inputs.get("capacidades", [])),
         inputs.get("grado", ""),
+        inputs.get("area", ""),
         inputs.get("contexto", "")
     ]
     query_text = " ".join(part for part in query_parts if part).strip()
 
-    def query_db():
-        embed_fn.document_mode = False
-        return knowledge_db.query(query_texts=[query_text], n_results=5)
+    # Extraer filtros de metadata desde los inputs del docente
+    rag_filters = {}
+    nivel_raw = str(inputs.get("nivel") or inputs.get("ciclo") or "").lower()
+    if "inicial" in nivel_raw:
+        rag_filters["nivel"] = "inicial"
+    elif "primaria" in nivel_raw:
+        rag_filters["nivel"] = "primaria"
+    elif "secundaria" in nivel_raw:
+        rag_filters["nivel"] = "secundaria"
 
-    result = await asyncio.to_thread(query_db)
-    retrieved_docs = result["documents"][0] if result["documents"] else []
+    area_raw = str(inputs.get("area") or "").lower().strip()
+    if area_raw:
+        rag_filters["area"] = area_raw
+
+    retrieved_docs = await asyncio.to_thread(
+        rag_search, query_text, rag_filters, 5
+    )
+    rag_latency_ms = int((time.time() - rag_start) * 1000)
+    logger.info(
+        "RAG: %d chunks recuperados en %dms (filtros=%s)",
+        len(retrieved_docs), rag_latency_ms, rag_filters
+    )
 
     if not client:
         update_session_status(session_id, "error")
@@ -52,8 +93,11 @@ async def generate_lesson_stream(session_id: str, message: str):
         return
 
     idioma_req = inputs.get("idioma", "español")
+    # Determinar nivel y área para el system instruction
+    nivel_label = rag_filters.get("nivel", "Educación Básica Regular").capitalize()
+    area_label = (inputs.get("area") or "todas las áreas").capitalize()
     system_instruction = (
-        "Actúa como un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "
+        f"Actúa como un asistente pedagógico experto en {area_label} de nivel {nivel_label} del Currículo Nacional Peruano del MINEDU (CNEB). "
         f"IMPORTANTE: El usuario ha solicitado redactar esta sesión completamente en '{idioma_req}'. "
         f"Por lo tanto, DEBES redactar todo el contenido textual de los valores del JSON únicamente en el idioma '{idioma_req}', "
         "de manera gramaticalmente correcta, natural y con alta calidad pedagógica. "
@@ -228,6 +272,27 @@ async def generate_lesson_stream(session_id: str, message: str):
 
     await asyncio.to_thread(save_logs)
     update_session_status(session_id, "completed")
+
+    # Registrar traza en Langfuse (si está configurado)
+    try:
+        lf = _get_langfuse()
+        if lf:
+            trace = lf.trace(name="generate_lesson", session_id=session_id)
+            trace.span(
+                name="rag_retrieval",
+                metadata={"filters": rag_filters, "chunks_retrieved": len(retrieved_docs)},
+                input=query_text,
+                output=str(retrieved_docs[:2]),
+            )
+            trace.generation(
+                name="core_plan",
+                model="gemini-3.1-flash-lite",
+                input=core_prompt[:500],
+                output=core_plan_json[:500],
+            )
+            lf.flush()
+    except Exception as lf_err:
+        logger.debug("Langfuse trace error (no crítico): %s", lf_err)
 
     # 6. Emitir completado
     yield json.dumps({"status": "completed", "data": final_lesson})

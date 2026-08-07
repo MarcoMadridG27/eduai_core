@@ -63,6 +63,20 @@ jobs:
             version: '3.8'
 
             services:
+              qdrant:
+                image: qdrant/qdrant:v1.9.7
+                container_name: qdrant
+                ports:
+                  - "6333:6333"
+                volumes:
+                  - qdrant_storage:/qdrant/storage
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD-SHELL", "curl -sf http://localhost:6333/readyz || exit 1"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+
               auth-api:
                 image: ${DOCKERHUB_USERNAME}/eduai-auth:latest
                 container_name: eduai-auth
@@ -85,10 +99,17 @@ jobs:
                   - "7700:7700"
                 environment:
                   - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+                  - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+                  - QDRANT_URL=http://qdrant:6333
+                  - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+                  - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+                  - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
                   - DB_NAME=/app/data/lesson_memory.db
-                  - TXT_URL=${TXT_URL:-https://raw.githubusercontent.com/angelmc-12/myfirstrepo/master/curriculo_texto.txt}
                 volumes:
                   - core_data:/app/data
+                depends_on:
+                  qdrant:
+                    condition: service_healthy
                 restart: always
 
               pdf-api:
@@ -111,13 +132,27 @@ jobs:
             volumes:
               core_data:
               wsp_session:
+              qdrant_storage:
             EOF
 
-            # 3. Descargar la nueva imagen del microservicio core
+            # 3. Levantar Qdrant si no está corriendo
+            docker compose up -d qdrant
+
+            # Esperar a que Qdrant esté saludable (máx 60s)
+            echo "Esperando que Qdrant esté listo..."
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:6333/readyz > /dev/null 2>&1; then
+                echo "Qdrant listo."
+                break
+              fi
+              sleep 5
+            done
+
+            # 4. Descargar la nueva imagen del microservicio core
             docker compose pull core-api
 
-            # 4. Levantar/actualizar solo el contenedor core
+            # 5. Levantar/actualizar solo el contenedor core
             docker compose up -d core-api
 
-            # 5. Limpiar imágenes antiguas sin usar para liberar espacio
+            # 6. Limpiar imágenes antiguas sin usar para liberar espacio
             docker image prune -f

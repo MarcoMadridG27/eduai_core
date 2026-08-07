@@ -1,10 +1,16 @@
 fastapi==0.110.0
 uvicorn==0.29.0
 numpy==1.26.4
-chromadb==0.4.22
 google-genai==1.7.0
+google-api-core
 sqlite-utils
 pysqlite3-binary
-google-api-core
 python-multipart
 python-dotenv
+# ──── RAG Pipeline ────
+docling>=2.0.0
+voyageai>=0.3.0
+qdrant-client>=1.9.0
+tiktoken>=0.7.0
+# ──── Observabilidad ────
+langfuse>=2.0.0

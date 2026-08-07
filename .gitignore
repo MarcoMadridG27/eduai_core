@@ -1,5 +1,10 @@
 .env
-chroma_db/
+# Vector DB (Qdrant data no se commitea)
+qdrant_storage/
+# PDFs del MINEDU (son grandes, no se commitean)
+pdfs/
+knowledge/
+# Base de datos SQLite
 lesson_memory.db
 *.db
 __pycache__/

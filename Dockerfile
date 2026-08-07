@@ -8,23 +8,39 @@ WORKDIR /app
 RUN groupadd -g 10001 appuser && \
     useradd -u 10000 -g appuser -m -s /bin/bash appuser
 
-# Copiar archivos de requisitos
+# Copiar archivos de requisitos primero (cache de capas Docker)
 COPY requirements.txt .
 
-# Instalar dependencias
+# Instalar dependencias del sistema necesarias para Docling
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar dependencias Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar de forma explícita los archivos de la aplicación para evitar COPY . .
-COPY config.py database.py knowledge.py main.py prompts.py schemas.py services.py utils.py ./
+# Copiar módulos de la aplicación
+COPY config.py database.py main.py prompts.py schemas.py services.py utils.py ./
+COPY rag/ ./rag/
+COPY scripts/ ./scripts/
 
-# Crear directorio para la base de datos SQLite y ajustar permisos
+# Copiar webhook si existe
+COPY webhook.py ./webhook.py 2>/dev/null || true
+
+# Crear directorios necesarios
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 
 # Exponer el puerto 7700
 EXPOSE 7700
 
-# Variable de entorno para la API key de Google
-ENV GOOGLE_API_KEY=""
+# Variables de entorno (valores vacíos por defecto; se pasan en docker-compose)
+ENV GOOGLE_API_KEY="" \
+    VOYAGE_API_KEY="" \
+    QDRANT_URL="" \
+    QDRANT_API_KEY="" \
+    LANGFUSE_SECRET_KEY="" \
+    LANGFUSE_PUBLIC_KEY="" \
+    LANGFUSE_HOST="https://cloud.langfuse.com"
 
 # Cambiar al usuario no privilegiado
 USER appuser
