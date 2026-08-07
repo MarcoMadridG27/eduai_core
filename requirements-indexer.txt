@@ -1,0 +1,21 @@
+# ──────────────────────────────────────────────────────────
+# requirements-indexer.txt
+#
+# Dependencias SOLO para el script offline de indexación:
+#   python scripts/index_documents.py
+#
+# NO se instalan en el Docker del servidor (para build rápido).
+# Instalar en la EC2 o en el entorno donde se corra la indexación:
+#   pip install -r requirements-indexer.txt
+# ──────────────────────────────────────────────────────────
+
+# Extracción de PDFs (pesado: incluye PyTorch + Transformers)
+docling>=2.0.0
+
+# Conteo de tokens para chunking semántico
+tiktoken>=0.7.0
+
+# Embeddings y Qdrant (comparte con runtime)
+voyageai>=0.3.0
+qdrant-client>=1.9.0
+python-dotenv

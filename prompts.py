@@ -26,22 +26,30 @@ def build_core_prompt(inputs, retrieved_docs):
     fecha = _as_text(inputs.get("fecha"))
     grado = _as_text(inputs.get("grado"))
     seccion = _as_text(inputs.get("seccion"))
+    area = _as_text(inputs.get("area") or "")
+    nivel = _as_text(inputs.get("nivel") or "")
     enfoque_transversal = _as_text(inputs.get(
         "enfoqueTransversal") or inputs.get("enfoque_transversal"))
     competencia_transversal = _as_text(inputs.get(
         "competenciaTransversal") or inputs.get("competencia_transversal"))
     idioma = _as_text(inputs.get("idioma") or "español")
 
+    # Etiqueta contextual para el prompt
+    area_label = area or "todas las áreas curriculares"
+    nivel_label = nivel or "Educación Básica Regular"
+
     prompt = (
-        "Eres un asistente pedagógico experto en Matemática del Currículo Nacional Peruano del MINEDU. "
+        f"Eres un asistente pedagógico experto en {area_label} para el nivel de {nivel_label} "
+        f"del Currículo Nacional de la Educación Básica del Perú (CNEB - MINEDU). "
         f"Tu tarea principal es diseñar y redactar una sesión de aprendizaje sumamente completa e interactiva redactada NATIVAMENTE y de forma EXCLUSIVA en {idioma.upper()}.\n"
         "Debes devolver SOLO un JSON válido, sin markdown ni texto adicional.\n\n"
         "Requisitos obligatorios:\n"
-        f"- Idioma de redacción: Todo el contenido de todos los campos textuales del JSON de salida (como propósitoSesion, criteriosEvaluacion, evidenciasAprendizaje, secuenciaMetodologica (inicio, desarrollo, cierre), actividadesContextualizadas, etc.) DEBE estar escrito estrictamente en el idioma {idioma.upper()}. Está terminantemente prohibido usar español u otros idiomas para los valores textuales.\n"
-        f"- Claves del JSON: Las claves del objeto JSON resultante (ej. 'tema', 'ciclo', 'secuenciaMetodologica', 'inicio', 'desarrollo', 'cierre', etc.) deben permanecer en español tal como se definen en el contrato de salida. ÚNICAMENTE traduce el contenido textual de los valores.\n"
+        f"- Idioma de redacción: Todo el contenido de todos los campos textuales del JSON de salida DEBE estar escrito estrictamente en el idioma {idioma.upper()}. Está terminantemente prohibido usar español u otros idiomas para los valores textuales.\n"
+        f"- Claves del JSON: Las claves del objeto JSON resultante deben permanecer en español tal como se definen en el contrato de salida. ÚNICAMENTE traduce el contenido textual de los valores.\n"
         "- Coherencia pedagógica entre competencias, capacidades, propósito, evaluación y actividades.\n"
         "- Contextualización real al entorno indicado.\n"
         "- Usa la cantidad de horas clase indicada y distribúyelas de forma realista.\n"
+        "- Adapta el lenguaje, las actividades y los recursos al nivel educativo indicado (Inicial, Primaria o Secundaria).\n"
         "- Respeta el siguiente orden en procesos didácticos: Familiarización con el problema, Búsqueda y ejecución de estrategias, Socialización de representaciones, Reflexión y formalización, Planteamiento de otros problemas.\n\n"
         "Contrato de salida esperado:\n"
         "{\n"
@@ -66,6 +74,8 @@ def build_core_prompt(inputs, retrieved_docs):
         '  "actitudes_observables": "string"\n'
         "}\n\n"
         "Datos de entrada:\n"
+        f"- Nivel educativo: {nivel_label}\n"
+        f"- Área curricular: {area_label}\n"
         f"- Tema: {tema}\n"
         f"- Docente: {docente}\n"
         f"- Fecha: {fecha}\n"
@@ -79,14 +89,14 @@ def build_core_prompt(inputs, retrieved_docs):
         f"- Materiales disponibles: {materiales}\n"
         f"- Enfoque transversal: {enfoque_transversal}\n"
         f"- Competencia transversal: {competencia_transversal}\n\n"
-        "Fragmentos relevantes del Currículo Nacional:\n"
+        "Fragmentos relevantes del Currículo Nacional (CNEB):\n"
     )
 
     if retrieved_docs:
         for i, doc in enumerate(retrieved_docs, 1):
             prompt += f"{i}. {doc.strip()}\n"
     else:
-        prompt += "- No se recuperaron fragmentos adicionales.\n"
+        prompt += "- No se recuperaron fragmentos del Currículo. Usa tu conocimiento del CNEB para completar la sesión.\n"
 
     prompt += (
         "\nGenera una sesión completa, pedagógicamente sólida y realista. "
@@ -98,6 +108,7 @@ def build_core_prompt(inputs, retrieved_docs):
         "Incluye `actitudes_observables` como una descripción breve y concreta de actitudes o acciones observables alineadas al enfoque transversal."
     )
     return prompt
+
 def build_resources_prompt(core_plan_json, idioma="español"):
     """
     Construye el prompt para la segunda fase: Generación de recursos complementarios.
