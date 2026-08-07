@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar de forma explícita los archivos de la aplicación para evitar COPY . .
-COPY config.py database.py knowledge.py main.py prompts.py schemas.py services.py utils.py ./
+COPY config.py database.py knowledge.py main.py prompts.py schemas.py services.py utils.py webhook.py ./
 
 # Crear directorio para la base de datos SQLite y ajustar permisos
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
