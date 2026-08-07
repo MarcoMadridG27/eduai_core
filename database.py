@@ -34,7 +34,20 @@ def init_db():
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS whatsapp_states (
+            phone_number TEXT PRIMARY KEY,
+            step INTEGER DEFAULT 0,
+            tema TEXT,
+            grado TEXT,
+            duracion TEXT,
+            competencia TEXT,
+            contexto TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
         conn.commit()
+
 
 
 def save_message(session_id, role, content):
@@ -159,3 +172,52 @@ def get_session(session_id):
 #         )
 #         rows = cursor.fetchall()
 #         return list(reversed(rows))
+
+
+def get_whatsapp_state(phone_number):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT step, tema, grado, duracion, competencia, contexto FROM whatsapp_states WHERE phone_number=?",
+            (phone_number,),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "step": row[0],
+        "tema": row[1],
+        "grado": row[2],
+        "duracion": row[3],
+        "competencia": row[4],
+        "contexto": row[5],
+    }
+
+
+def save_whatsapp_state(phone_number, step, tema=None, grado=None, duracion=None, competencia=None, contexto=None):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO whatsapp_states (phone_number, step, tema, grado, duracion, competencia, contexto, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(phone_number) DO UPDATE SET
+                step=excluded.step,
+                tema=COALESCE(excluded.tema, whatsapp_states.tema),
+                grado=COALESCE(excluded.grado, whatsapp_states.grado),
+                duracion=COALESCE(excluded.duracion, whatsapp_states.duracion),
+                competencia=COALESCE(excluded.competencia, whatsapp_states.competencia),
+                contexto=COALESCE(excluded.contexto, whatsapp_states.contexto),
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (phone_number, step, tema, grado, duracion, competencia, contexto),
+        )
+        conn.commit()
+
+
+def clear_whatsapp_state(phone_number):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM whatsapp_states WHERE phone_number=?", (phone_number,))
+        conn.commit()
+

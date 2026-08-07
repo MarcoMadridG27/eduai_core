@@ -118,22 +118,11 @@ jobs:
                 ports:
                   - "9000:8800"
                 restart: always
-
-              wsp-bot:
-                image: ${DOCKERHUB_USERNAME}/eduai-wsp:latest
-                container_name: eduai-wsp
-                environment:
-                  - CORE_API_URL=http://core-api:7700
-                  - PDF_API_URL=http://pdf-api:8800
-                volumes:
-                  - wsp_session:/app/.wsp_session
-                restart: always
-
             volumes:
               core_data:
-              wsp_session:
               qdrant_storage:
             EOF
+
 
             # 3. Levantar Qdrant si no está corriendo
             docker compose up -d qdrant

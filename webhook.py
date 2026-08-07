@@ -6,9 +6,11 @@ import httpx
 from fastapi import APIRouter, Request, Query, BackgroundTasks, HTTPException
 from fastapi.responses import Response, JSONResponse
 
-from database import save_session_input, save_generated_session, update_session_status
+from database import (save_session_input, save_generated_session, update_session_status,
+                      get_whatsapp_state, save_whatsapp_state, clear_whatsapp_state)
 from utils import normalize_session_input
 from services import generate_lesson_result
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +63,9 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
                             
                             if from_phone and message_body:
                                 logger.info(f"Mensaje de WhatsApp de {from_phone}: {message_body}")
-                                # Agregar tarea en segundo plano para procesar la generacion de la sesion
+                                # Agregar tarea en segundo plano para procesar la conversacion e interactuar
                                 background_tasks.add_task(
-                                    process_whatsapp_message_async,
+                                    handle_whatsapp_flow_async,
                                     phone_number_id,
                                     from_phone,
                                     message_body
@@ -74,15 +76,138 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     return JSONResponse(content={"status": "ignored"})
 
 
-async def process_whatsapp_message_async(phone_number_id: str, from_phone: str, message_body: str):
-    """Procesa el mensaje recibido en segundo plano, genera la sesion y responde."""
-    # 1. Enviar mensaje inicial al usuario indicando el inicio del proceso
-    initial_text = "¡Hola! Estoy generando tu sesión de aprendizaje con IA. Esto tomará unos segundos... ⏳"
-    await send_whatsapp_message(phone_number_id, from_phone, initial_text)
+async def handle_whatsapp_flow_async(phone_number_id: str, from_phone: str, message_body: str):
+    """Maneja el flujo conversacional interactivo paso a paso."""
+    body_clean = message_body.strip()
+    body_lower = body_clean.lower()
 
-    # 2. Inicializar sesion en base de datos local SQLite
+    # Cancelar o reiniciar el flujo
+    if body_lower in ["cancelar", "reiniciar", "salir", "/start"]:
+        clear_whatsapp_state(from_phone)
+        await send_whatsapp_message(phone_number_id, from_phone, "❌ Proceso cancelado. Escribe cualquier mensaje para iniciar una nueva sesión de aprendizaje.")
+        return
+
+    # Consultar estado actual
+    state = get_whatsapp_state(from_phone)
+
+    if not state:
+        # Si el usuario escribe algo para empezar
+        if body_lower in ["crear", "sesion", "hola", "bot", "ayuda", "empezar", "crear sesion"]:
+            save_whatsapp_state(from_phone, step=1)
+            welcome_text = (
+                "🤖 *¡Hola! Bienvenido al asistente de EduAI.* 🤖\n\n"
+                "Te guiaré paso a paso para estructurar tu sesión de aprendizaje.\n\n"
+                "Para comenzar, escribe el **tema o título** de la sesión (ej: _Las plantas y sus partes_):"
+            )
+            await send_whatsapp_message(phone_number_id, from_phone, welcome_text)
+        else:
+            # Si escribe texto libre directo y no un comando de inicio, procesamos directamente con IA (flujo rápido)
+            await process_whatsapp_message_async(phone_number_id, from_phone, message_body=message_body)
+        return
+
+    step = state["step"]
+
+    if step == 1:
+        # Guardar tema y preguntar por el grado
+        save_whatsapp_state(from_phone, step=2, tema=body_clean)
+        msg = (
+            f"📝 *Tema registrado:* {body_clean}\n\n"
+            "¿Para qué **grado o nivel** es la sesión? (ej: _1ro de Secundaria_, _5to de Primaria_):"
+        )
+        await send_whatsapp_message(phone_number_id, from_phone, msg)
+
+    elif step == 2:
+        # Guardar grado y preguntar por la duracion
+        save_whatsapp_state(from_phone, step=3, grado=body_clean)
+        msg = (
+            f"🏫 *Grado registrado:* {body_clean}\n\n"
+            "¿Cuál es la **duración** estimada de la clase? (ej: _2 horas_, _90 minutos_):"
+        )
+        await send_whatsapp_message(phone_number_id, from_phone, msg)
+
+    elif step == 3:
+        # Guardar duracion y preguntar por la competencia
+        save_whatsapp_state(from_phone, step=4, duracion=body_clean)
+        msg = (
+            f"⏱️ *Duración registrada:* {body_clean}\n\n"
+            "Selecciona la **competencia** matemática de la sesión escribiendo el número correspondiente (1-4):\n\n"
+            "1️⃣ Resuelve problemas de cantidad\n"
+            "2️⃣ Resuelve problemas de regularidad, equivalencia y cambio\n"
+            "3️⃣ Resuelve problemas de forma, movimiento y localización\n"
+            "4️⃣ Resuelve problemas de gestión de datos e incertidumbre"
+        )
+        await send_whatsapp_message(phone_number_id, from_phone, msg)
+
+    elif step == 4:
+        # Guardar competencia y preguntar por el contexto
+        comp_map = {
+            "1": "Resuelve problemas de cantidad",
+            "2": "Resuelve problemas de regularidad, equivalencia y cambio",
+            "3": "Resuelve problemas de forma, movimiento y localización",
+            "4": "Resuelve problemas de gestión de datos e incertidumbre",
+        }
+        competencia = comp_map.get(body_clean) or body_clean
+        save_whatsapp_state(from_phone, step=5, competencia=competencia)
+        msg = (
+            f"🎯 *Competencia registrada:* {competencia}\n\n"
+            "Por último, escribe una descripción del **contexto sociocultural** o problemas de tu aula escolar (o escribe *no* para omitirlo):"
+        )
+        await send_whatsapp_message(phone_number_id, from_phone, msg)
+
+    elif step == 5:
+        # Guardar contexto, limpiar estado e iniciar generacion asincrona
+        contexto = "" if body_lower == "no" else body_clean
+        save_whatsapp_state(from_phone, step=6, contexto=contexto)
+        
+        # Recuperar estado completo
+        full_state = get_whatsapp_state(from_phone)
+        clear_whatsapp_state(from_phone)
+
+        msg = "¡Excelente! He recopilado todos los datos. Iniciando la generación de tu sesión con IA... ⏳"
+        await send_whatsapp_message(phone_number_id, from_phone, msg)
+
+        # Lanzar proceso de IA en segundo plano
+        await process_whatsapp_message_async(
+            phone_number_id,
+            from_phone,
+            state_data=full_state
+        )
+
+
+async def process_whatsapp_message_async(
+    phone_number_id: str,
+    from_phone: str,
+    message_body: str = None,
+    state_data: dict = None
+):
+    """Procesa el mensaje o el estado recopilado en segundo plano, genera la sesion y responde."""
     session_id = f"wa_{from_phone}_{int(time.time())}"
-    normalized_data = normalize_session_input(message_body)
+
+    if state_data:
+        # Si viene del flujo paso a paso
+        normalized_data = {
+            "tema": state_data.get("tema", ""),
+            "titulo": state_data.get("tema", ""),
+            "docente": "Bot de WhatsApp",
+            "fecha": "",
+            "grado": state_data.get("grado", ""),
+            "seccion": "",
+            "competenciasSeleccionadas": [state_data.get("competencia")] if state_data.get("competencia") else [],
+            "capacidades": [],
+            "ciclo": "",
+            "contexto": state_data.get("contexto", ""),
+            "duracion": state_data.get("duracion", "2 horas"),
+            "horasClase": 2,
+            "enfoqueTransversal": "",
+            "competenciaTransversal": "",
+            "materialesDisponibles": "",
+            "idioma": "español"
+        }
+    else:
+        # Si es un flujo directo de texto libre
+        initial_text = "¡Hola! Estoy generando tu sesión de aprendizaje con IA. Esto tomará unos segundos... ⏳"
+        await send_whatsapp_message(phone_number_id, from_phone, initial_text)
+        normalized_data = normalize_session_input(message_body)
     
     try:
         # Registrar entrada en la base de datos local
@@ -107,6 +232,7 @@ async def process_whatsapp_message_async(phone_number_id: str, from_phone: str, 
         logger.exception("Error en la tarea en segundo plano para procesar mensaje de WhatsApp")
         error_msg = "Lo siento, ocurrió un error inesperado al procesar tu solicitud. Por favor intenta de nuevo más tarde."
         await send_whatsapp_message(phone_number_id, from_phone, error_msg)
+
 
 
 async def send_whatsapp_message(phone_number_id: str, to_phone: str, text_message: str):
