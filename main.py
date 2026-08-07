@@ -18,8 +18,11 @@ app = FastAPI(
     version="2.0.0"
 )
 
-from webhook import router as whatsapp_router
-app.include_router(whatsapp_router)
+try:
+    from webhook import router as whatsapp_router
+    app.include_router(whatsapp_router)
+except ImportError:
+    pass
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
