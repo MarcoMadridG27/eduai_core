@@ -39,14 +39,15 @@ _SECTION_BREAK_RE = re.compile(
 
 
 def _count_tokens_approx(text: str) -> int:
-    """Cuenta tokens aproximados. Usa tiktoken si está disponible."""
+    """Cuenta tokens aproximados. Usa tiktoken si está disponible, si no aproximación por caracteres."""
     try:
         import tiktoken
         enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text))
     except Exception:
-        # Fallback: aproximación por caracteres
+        # Fallback: ~4 chars por token en español (funciona bien para chunking)
         return len(text) // 4
+
 
 
 def _split_into_sections(text: str) -> list[str]:

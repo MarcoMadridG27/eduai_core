@@ -7,10 +7,8 @@ sqlite-utils
 pysqlite3-binary
 python-multipart
 python-dotenv
-# ──── RAG Pipeline ────
-docling>=2.0.0
+# ──── RAG Runtime (retrieval only) ────
 voyageai>=0.3.0
 qdrant-client>=1.9.0
-tiktoken>=0.7.0
 # ──── Observabilidad ────
 langfuse>=2.0.0
