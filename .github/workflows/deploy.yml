@@ -104,6 +104,10 @@ jobs:
                   - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
                   - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
                   - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+                  - WHATSAPP_TOKEN=${WHATSAPP_TOKEN:-}
+                  - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID:-}
+                  - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN:-eduai_verify_token}
+                  - PDF_RENDER_API_URL=${PDF_RENDER_API_URL:-http://pdf-api:8800}
                   - DB_NAME=/app/data/lesson_memory.db
                 volumes:
                   - core_data:/app/data
