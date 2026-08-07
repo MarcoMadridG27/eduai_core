@@ -38,7 +38,8 @@ class VoyageEmbedder(EmbedderBase):
     API Key: VOYAGE_API_KEY en .env
     """
     MODEL = "voyage-3.5"
-    BATCH_SIZE = 128  # Límite de la API de Voyage AI
+    BATCH_SIZE = 10  # Lote reducido para cumplir con límite de 10K TPM en free tier
+    DELAY_BETWEEN_BATCHES = 21.0  # Pausa de 21s entre peticiones (máximo 3 RPM)
 
     def __init__(self, api_key: Optional[str] = None):
         import voyageai
@@ -48,23 +49,47 @@ class VoyageEmbedder(EmbedderBase):
                 "VOYAGE_API_KEY no configurada. Agrégala en el archivo .env"
             )
         self._client = voyageai.Client(api_key=self._api_key)
-        logger.info("VoyageEmbedder inicializado con modelo %s", self.MODEL)
+        logger.info("VoyageEmbedder inicializado con modelo %s (rate limit mode)", self.MODEL)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """
         Genera embeddings en modo 'document' para indexación.
-        Procesa en batches de BATCH_SIZE para respetar límites de la API.
+        Procesa en lotes pequeños con pausas automáticas para respetar el free tier.
         """
+        import time
         all_embeddings = []
-        for i in range(0, len(texts), self.BATCH_SIZE):
+        total = len(texts)
+        for i in range(0, total, self.BATCH_SIZE):
             batch = texts[i:i + self.BATCH_SIZE]
-            result = self._client.embed(
-                batch,
-                model=self.MODEL,
-                input_type="document",
-            )
-            all_embeddings.extend(result.embeddings)
-            logger.debug("Embeddings generados para lote %d-%d", i, i + len(batch))
+            
+            # Reintentos con respaldo exponencial en caso de rate limit inesperado
+            success = False
+            for attempt in range(5):
+                try:
+                    result = self._client.embed(
+                        batch,
+                        model=self.MODEL,
+                        input_type="document",
+                    )
+                    all_embeddings.extend(result.embeddings)
+                    success = True
+                    break
+                except Exception as e:
+                    if "RateLimit" in str(e) or "rate limit" in str(e).lower():
+                        wait_time = 30 * (attempt + 1)
+                        logger.warning("Rate limit alcanzado. Pausando %d segundos...", wait_time)
+                        time.sleep(wait_time)
+                    else:
+                        raise e
+            if not success:
+                raise RuntimeError(f"Fallo al generar embeddings para lote {i}-{i+len(batch)}")
+
+            logger.info("Embeddings generados para lote %d/%d", min(i + self.BATCH_SIZE, total), total)
+            
+            # Pausa defensiva entre lotes si quedan más por procesar
+            if i + self.BATCH_SIZE < total:
+                time.sleep(self.DELAY_BETWEEN_BATCHES)
+
         return all_embeddings
 
     def embed_query(self, text: str) -> list[float]:
