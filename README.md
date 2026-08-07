@@ -138,7 +138,7 @@ El backend de EduAI Core se encuentra securizado para su empaquetado en contened
 - No ejecuta la aplicación bajo el usuario `root` de Linux (resuelve el Security Hotspot `docker:S6471` implementando un usuario sin privilegios `appuser`).
 - Copia de manera selectiva y explícita los módulos requeridos, evitando el almacenamiento de archivos temporales locales (resuelve el Security Hotspot `docker:S6470`).
 
-Para compilar y ejecutar de manera contenerizada:
+Para compilar y ejecutar de manera contenerizada.:
 
 ```bash
 # Compilar la imagen de Docker
