@@ -34,10 +34,10 @@ class EmbedderBase(ABC):
 class VoyageEmbedder(EmbedderBase):
     """
     Embedder usando Voyage AI.
-    Modelo: voyage-3 (optimizado para RAG multilenguaje, incluye español).
+    Modelo: voyage-3.5 (optimizado para RAG multilenguaje, incluye español).
     API Key: VOYAGE_API_KEY en .env
     """
-    MODEL = "voyage-3"
+    MODEL = "voyage-3.5"
     BATCH_SIZE = 128  # Límite de la API de Voyage AI
 
     def __init__(self, api_key: Optional[str] = None):
