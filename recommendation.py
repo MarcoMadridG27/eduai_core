@@ -21,6 +21,20 @@ class RecommendRequest(BaseModel):
     tema: str
 
 
+class SugerenciaArea(BaseModel):
+    area: str
+    competencia: str
+    capacidades: List[str] = []
+    enfoque_explicacion: str
+
+
+class RecommendResponse(BaseModel):
+    coincide: bool
+    es_multiarea: bool
+    mensaje_evaluacion: str
+    recomendaciones: List[SugerenciaArea] = []
+
+
 # Diccionario CNEB de respaldo con competencias y capacidades por área oficial
 AREAS_CNEB_INFO = {
     "Ciencia y Tecnología": {
