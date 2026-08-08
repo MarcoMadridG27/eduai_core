@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar módulos de la aplicación
-COPY config.py database.py main.py prompts.py schemas.py services.py utils.py webhook.py ./
+COPY *.py ./
 COPY rag/ ./rag/
 COPY scripts/ ./scripts/
 
