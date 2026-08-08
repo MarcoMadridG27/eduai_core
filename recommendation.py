@@ -113,13 +113,55 @@ MAPEO_PEDAGOGICO = {
         "area": "Ciencia y Tecnología",
         "competencia": "Indaga mediante métodos científicos para construir sus conocimientos",
         "capacidades": ["Problematiza situaciones para hacer indagación", "Genera y registra datos o información"],
-        "explicacion": "El estudio de los seres vivos y la naturaleza se desarrolla en Ciencia y Tecnología / Descubrimiento del Mundo."
+        "explicacion": "El estudio de los seres vivos y las plantas se desarrolla en el área de Ciencia y Tecnología."
+    },
+    "fotosintesis": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
+        "explicacion": "La fotosíntesis y nutrición vegetal pertenecen al área de Ciencia y Tecnología mediante el estudio del mundo físico y seres vivos."
+    },
+    "celula": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
+        "explicacion": "La estructura celular y funciones biológicas corresponden al área de Ciencia y Tecnología."
+    },
+    "energia": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre materia y energía", "Evalúa las implicancias del saber científico"],
+        "explicacion": "Las formas de energía y transformaciones físicas corresponden a Ciencia y Tecnología."
+    },
+    "ecosistema": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
+        "explicacion": "Las relaciones entre organismos y el medio ambiente corresponden a Ciencia y Tecnología."
+    },
+    "atomo": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre materia y energía", "Evalúa las implicancias del saber científico"],
+        "explicacion": "La estructura atómica y propiedades de la materia pertenecen al área de Ciencia y Tecnología."
+    },
+    "materia": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre materia y energía", "Evalúa las implicancias del saber científico"],
+        "explicacion": "Los estados y propiedades de la materia corresponden al área de Ciencia y Tecnología."
+    },
+    "digestiv": {
+        "area": "Ciencia y Tecnología",
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
+        "explicacion": "Los sistemas del cuerpo humano se abordan en Ciencia y Tecnología."
     },
     "animal": {
         "area": "Ciencia y Tecnología",
         "competencia": "Indaga mediante métodos científicos para construir sus conocimientos",
         "capacidades": ["Problematiza situaciones para hacer indagación", "Genera y registra datos o información"],
-        "explicacion": "La observación y cuidado de los animales forma parte de la indagación científica."
+        "explicacion": "La observación y cuidado de los animales forma parte de la indagación científica en Ciencia y Tecnología."
     }
 }
 
