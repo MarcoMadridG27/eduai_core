@@ -8,14 +8,9 @@ import json
 import logging
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
-import google.generativeai as genai
-from config import GOOGLE_API_KEY
 from rag.retriever import search
 
 logger = logging.getLogger(__name__)
-
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
 
 
 class RecommendRequest(BaseModel):
