@@ -89,6 +89,7 @@ def home():
 
 
 @app.post("/api/recommend-curriculum")
+@app.post("/recommend-curriculum")
 async def recommend_curriculum(req: RecommendRequest):
     """
     Endpoint para el Copiloto Curricular Inteligente.
