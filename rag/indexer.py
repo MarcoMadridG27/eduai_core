@@ -40,7 +40,7 @@ def get_qdrant_client() -> QdrantClient:
 
     if qdrant_url:
         logger.info("Conectando a Qdrant en %s", qdrant_url)
-        return QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=60)
+        return QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=120)
     else:
         logger.warning("QDRANT_URL no definida. Usando Qdrant en memoria (solo desarrollo).")
         return QdrantClient(":memory:")
