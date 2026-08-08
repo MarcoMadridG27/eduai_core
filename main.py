@@ -88,14 +88,8 @@ def home():
     return {"status": "ok", "message": "Generador de sesiones educativas corriendo (v2) 🚀"}
 
 
-@app.options("/api/recommend-curriculum")
-@app.options("/recommend-curriculum")
-async def recommend_curriculum_options():
-    return Response(status_code=200)
-
-
-@app.post("/api/recommend-curriculum")
 @app.post("/recommend-curriculum")
+@app.post("/api/recommend-curriculum")
 async def recommend_curriculum(req: RecommendRequest):
     """
     Endpoint para el Copiloto Curricular Inteligente.
