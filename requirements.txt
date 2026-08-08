@@ -2,6 +2,7 @@ fastapi==0.110.0
 uvicorn==0.29.0
 numpy==1.26.4
 google-genai==1.7.0
+google-generativeai
 google-api-core
 sqlite-utils
 pysqlite3-binary
