@@ -251,10 +251,44 @@ def obtener_recomendacion_curricular(req: RecommendRequest) -> Dict[str, Any]:
                 ]
             }
 
-    # 3. Consulta RAG a Qdrant para enriquecer la respuesta
-    chunks = search(query=f"Competencia área curricular {req.tema}", filters={"nivel": req.nivel}, top_k=2)
+    # 3. Consulta RAG a Qdrant si no estuvo en el mapa rápido
+    query_rag = f"Área curricular competencias para el tema {req.tema}"
+    chunks = search(query=query_rag, filters={"nivel": req.nivel}, top_k=3)
 
-    # Caso A: Todo coincide o no requiere corrección
+    # Si la consulta RAG devuelve contexto de Qdrant, analizar la mejor área
+    if chunks:
+        contexto_rag_text = " ".join(chunks).lower()
+        
+        # Detectar si los chunks del CNEB apuntan a un área distinta a la elegida
+        areas_posibles = [
+            ("Ciencia y Tecnología", ["ciencia", "tecnología", "indaga", "mundo físico", "seres vivos", "materia", "energía", "fotosíntesis", "célula"]),
+            ("Personal Social", ["personal social", "identidad", "convive", "ciudadanía", "emociones", "valores"]),
+            ("Comunicación", ["comunicación", "textos", "lectura", "escribe", "oralmente", "lenguaje"]),
+            ("Matemática", ["matemática", "números", "cantidad", "geometría", "forma", "problemas", "álgebra", "cálculo"]),
+            ("Educación Física", ["psicomotricidad", "educación física", "motricidad", "cuerpo", "deporte"]),
+            ("Arte y Cultura", ["arte", "cultura", "lenguajes artísticos", "música", "dibujo"]),
+        ]
+        
+        area_actual_lower = (req.area_seleccionada or "").strip().lower()
+        for area_nombre, palabras in areas_posibles:
+            # Si el RAG apunta fuertemente a otra área y no a la actual
+            if area_nombre.lower() != area_actual_lower:
+                if any(p in contexto_rag_text for p in palabras) and any(p in tema_lower for p in palabras):
+                    return {
+                        "coincide": False,
+                        "es_multiarea": False,
+                        "mensaje_evaluacion": f"Según el Currículo Nacional (RAG), el tema '{req.tema}' suele abordarse en el área de {area_nombre}. Actualmente seleccionaste {req.area_seleccionada}. Puedes adaptar la recomendación o mantener tu selección.",
+                        "recomendaciones": [
+                            {
+                                "area": area_nombre,
+                                "competencia": f"Competencia sugerida CNEB para {area_nombre}",
+                                "capacidades": ["Capacidades oficiales CNEB del área"],
+                                "enfoque_explicacion": f"Enfoque pedagógico recuperado de los documentos oficiales del CNEB para {area_nombre}."
+                            }
+                        ]
+                    }
+
+    # Caso A: Todo coincide adecuadamente
     return {
         "coincide": True,
         "es_multiarea": False,
