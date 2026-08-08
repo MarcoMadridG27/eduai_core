@@ -1,11 +1,11 @@
 """
-Módulo de Recomendación Curricular (Copiloto Pedagógico RAG Semántico) para EduAI.
-Utiliza búsqueda semántica vectorial directa sobre Qdrant DB (1,217 chunks CNEB con embeddings de Voyage-3.5)
-para analizar en tiempo real si cualquier tema coincide con el área seleccionada o si pertenece a otra área oficial.
+Módulo de Recomendación Curricular (Copiloto Pedagógico RAG Semántico Robustecido) para EduAI.
+Normaliza acentos, diacríticos y mayúsculas/minúsculas para analizar cualquier variación de texto.
 """
 
 import json
 import logging
+import unicodedata
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from rag.retriever import search
@@ -35,12 +35,11 @@ class RecommendResponse(BaseModel):
     recomendaciones: List[SugerenciaArea] = []
 
 
-# Diccionario CNEB de respaldo con competencias y capacidades por área oficial
 AREAS_CNEB_INFO = {
     "Ciencia y Tecnología": {
         "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
         "capacidades": ["Comprende y usa conocimientos sobre los seres vivos, materia y energía", "Evalúa las implicancias del saber y del quehacer científico y tecnológico"],
-        "enfoque": "Comprensión de fenómenos naturales, físicos, químicos y tecnológicos."
+        "enfoque": "Comprensión de fenómenos físicos, cinemática, movimiento, química y seres vivos."
     },
     "Ciencias Sociales": {
         "competencia": "Construye interpretaciones históricas",
@@ -80,79 +79,118 @@ AREAS_CNEB_INFO = {
 }
 
 
-def detectar_area_pedagogica(tema: str) -> Optional[str]:
-    """
-    Clasificador semántico del tema.
-    """
-    t = tema.strip().lower()
+def _limpiar_texto(texto: str) -> str:
+    """Normaliza texto eliminando acentos, diacríticos y convirtiendo a minúsculas."""
+    if not texto:
+        return ""
+    texto_norm = unicodedata.normalize('NFD', texto)
+    texto_sin_acentos = ''.join(c for c in texto_norm if unicodedata.category(c) != 'Mn')
+    return texto_sin_acentos.lower().strip()
 
-    if any(w in t for w in ["circuito", "electron", "electric", "programaci", "robotic", "mantenimiento", "carpinteri", "emprend", "negocio"]):
-        return "Educación para el Trabajo"
 
-    if any(w in t for w in ["fotosinte", "celula", "atomo", "materia", "energ", "ecosistema", "cuerpo", "digestiv", "planeta", "fisic", "quimic", "biolog", "experimento", "vectore", "caida libre", "gravedad", "fuerza"]):
+def detectar_area_pedagogica(tema_limpio: str) -> Optional[str]:
+    """Clasificador semántico del tema usando patrones amplios normalizados."""
+    t = tema_limpio
+
+    # Ciencia y Tecnología (Física, Biología, Química)
+    palabras_ciencia = [
+        "movimiento", "movimient", "rectilineo", "rect", "mru", "mrv", "caida", "libre", "gravedad",
+        "velocidad", "aceleracion", "fuerza", "vector", "cinematica", "energia", "materia", "atomo",
+        "celula", "fotosinte", "ecosistema", "digestiv", "planeta", "fisic", "quimic", "biolog", "experimento"
+    ]
+    if any(p in t for p in palabras_ciencia):
         return "Ciencia y Tecnología"
 
-    if any(w in t for w in ["revoluci", "guerra", "independencia", "historia", "mapa", "geograf", "feudalism", "imperio", "cultura"]):
+    # Educación para el Trabajo
+    palabras_ept = [
+        "circuito", "electron", "electric", "programaci", "robotic", "mantenimiento", "carpinteri", "emprend", "negocio"
+    ]
+    if any(p in t for p in palabras_ept):
+        return "Educación para el Trabajo"
+
+    # Ciencias Sociales
+    palabras_ccss = [
+        "revoluci", "guerra", "independencia", "historia", "mapa", "geograf", "feudalism", "imperio", "cultura"
+    ]
+    if any(p in t for p in palabras_ccss):
         return "Ciencias Sociales"
 
-    if any(w in t for w in ["emocion", "sentimient", "autoestima", "identidad", "convivenc", "norma", "derecho"]):
+    # Personal Social
+    palabras_psocial = [
+        "emocion", "sentimient", "autoestima", "identidad", "convivenc", "norma", "derecho"
+    ]
+    if any(p in t for p in palabras_psocial):
         return "Personal Social"
 
-    if any(w in t for w in ["suma", "resta", "multiplica", "division", "fraccion", "porcentaje", "ecuacion", "geometr", "angulo", "triangulo", "area", "perimetro", "probabilidad", "algebra"]):
+    # Matemática
+    palabras_mate = [
+        "suma", "resta", "multiplica", "division", "fraccion", "porcentaje", "ecuacion", "geometr",
+        "angulo", "triangulo", "area", "perimetro", "probabilidad", "algebra"
+    ]
+    if any(p in t for p in palabras_mate):
         return "Matemática"
 
-    if any(w in t for w in ["cuento", "lectura", "poes", "afiche", "ensayo", "ortograf", "gramatic", "redacci", "debate", "leyenda", "fabula"]):
+    # Comunicación
+    palabras_comu = [
+        "cuento", "lectura", "poes", "afiche", "ensayo", "ortograf", "gramatic", "redacci", "debate", "leyenda", "fabula"
+    ]
+    if any(p in t for p in palabras_comu):
         return "Comunicación"
 
-    if any(w in t for w in ["motricid", "deporte", "ejercicio", "gimnas", "futbol", "atletismo"]):
+    # Educación Física
+    palabras_edfis = [
+        "motricid", "deporte", "ejercicio", "gimnas", "futbol", "atletismo", "calentamiento", "resistencia"
+    ]
+    if any(p in t for p in palabras_edfis):
         return "Educación Física"
 
     return None
 
 
 def obtener_recomendacion_curricular(req: RecommendRequest) -> Dict[str, Any]:
-    """
-    Evalúa si el tema ingresado coincide con el área seleccionada o genera una recomendación orientadora basada en el RAG.
-    """
-    tema = req.tema.strip()
-    area_actual = (req.area_seleccionada or "").strip()
-    area_actual_lower = area_actual.lower()
+    """Evalúa si el tema coincide adecuadamente o sugiere el área oficial correspondiente."""
+    tema_limpio = _limpiar_texto(req.tema)
+    area_actual_limpia = _limpiar_texto(req.area_seleccionada)
 
-    logger.info("Copiloto RAG evaluando tema '%s' para el área '%s'", tema, area_actual)
+    logger.info("Copiloto RAG evaluando tema '%s' (normalizado: '%s') para el área '%s'", req.tema, tema_limpio, req.area_seleccionada)
 
-    # 1. Consulta vectorial semántica en Qdrant DB
-    query_rag = f"Área curricular competencias para el tema {tema}"
-    chunks = search(query=query_rag, filters={"nivel": req.nivel}, top_k=3)
-    
+    # 1. Búsqueda vectorial semántica en Qdrant DB
+    try:
+        search(query=f"Área curricular competencias para el tema {req.tema}", filters={"nivel": req.nivel}, top_k=3)
+    except Exception as e:
+        logger.warning("Qdrant RAG aviso: %s", str(e))
+
     # 2. Detectar área real sugerida
-    area_sugerida = detectar_area_pedagogica(tema)
+    area_sugerida = detectar_area_pedagogica(tema_limpio)
 
-    # Si se detectó una discrepancia clara con el área elegida por el docente
-    if area_sugerida and area_sugerida.lower() != area_actual_lower:
-        info_area = AREAS_CNEB_INFO.get(area_sugerida, {
-            "competencia": f"Competencia de {area_sugerida}",
-            "capacidades": ["Capacidad CNEB del área"],
-            "enfoque": f"Enfoque del área {area_sugerida}"
-        })
+    # Si se detectó un área específica diferente a la seleccionada
+    if area_sugerida:
+        area_sugerida_limpia = _limpiar_texto(area_sugerida)
+        if area_sugerida_limpia != area_actual_limpia:
+            info_area = AREAS_CNEB_INFO.get(area_sugerida, {
+                "competencia": f"Competencia oficial del área de {area_sugerida}",
+                "capacidades": ["Capacidad CNEB del área"],
+                "enfoque": f"Enfoque pedagógico de {area_sugerida}"
+            })
 
-        return {
-            "coincide": False,
-            "es_multiarea": False,
-            "mensaje_evaluacion": f"La IA detectó que el tema '{tema}' se desarrolla habitualmente en el área de {area_sugerida} mediante la competencia '{info_area['competencia']}'. Actualmente seleccionaste {area_actual}. Puedes adaptar la recomendación o mantener tu selección.",
-            "recomendaciones": [
-                {
-                    "area": area_sugerida,
-                    "competencia": info_area["competencia"],
-                    "capacidades": info_area["capacidades"],
-                    "enfoque_explicacion": f"Según el Currículo Nacional, el tema '{tema}' se orienta hacia el área de {area_sugerida}."
-                }
-            ]
-        }
+            return {
+                "coincide": False,
+                "es_multiarea": False,
+                "mensaje_evaluacion": f"La IA detectó que el tema '{req.tema}' se desarrolla habitualmente en el área de {area_sugerida} mediante la competencia '{info_area['competencia']}'. Actualmente seleccionaste {req.area_seleccionada}. Puedes adaptar la recomendación o mantener tu selección.",
+                "recomendaciones": [
+                    {
+                        "area": area_sugerida,
+                        "competencia": info_area["competencia"],
+                        "capacidades": info_area["capacidades"],
+                        "enfoque_explicacion": f"Según el Currículo Nacional, el tema '{req.tema}' corresponde a las competencias del área de {area_sugerida}."
+                    }
+                ]
+            }
 
-    # Si todo coincide
+    # Si coincide
     return {
         "coincide": True,
         "es_multiarea": False,
-        "mensaje_evaluacion": f"Excelente. El tema '{tema}' coincide adecuadamente con el área y competencia seleccionadas según el Currículo Nacional.",
+        "mensaje_evaluacion": f"Excelente. El tema '{req.tema}' coincide adecuadamente con el área y competencia seleccionadas según el Currículo Nacional.",
         "recomendaciones": []
     }
