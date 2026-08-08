@@ -1,14 +1,15 @@
 """
-Módulo de Recomendación Curricular (Copiloto Pedagógico RAG Semántico Robustecido) para EduAI.
-Normaliza acentos, diacríticos y mayúsculas/minúsculas para analizar cualquier variación de texto.
-Utiliza el Currículo Nacional de la Educación Básica (CNEB) del Perú.
+Módulo de Recomendación Curricular (Copiloto Pedagógico RAG Dinámico con Gemini AI + Qdrant) para EduAI.
+Evalúa cualquier tema de forma 100% dinámica utilizando Gemini LLM y la base vectorial Qdrant del CNEB.
 """
 
 import json
 import logging
-import unicodedata
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+from google import genai
+from google.genai import types
+from config import GOOGLE_API_KEY, client as genai_client
 from rag.retriever import search
 
 logger = logging.getLogger(__name__)
@@ -36,202 +37,86 @@ class RecommendResponse(BaseModel):
     recomendaciones: List[SugerenciaArea] = []
 
 
-AREAS_CNEB_INFO = {
-    "Ciencia y Tecnología": {
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos, materia y energía", "Evalúa las implicancias del saber y del quehacer científico y tecnológico"],
-        "enfoque": "Comprensión de fenómenos físicos, seres vivos, anatomía, botánica, química y ecología."
-    },
-    "Ciencias Sociales": {
-        "competencia": "Construye interpretaciones históricas",
-        "capacidades": ["Interpreta críticamente fuentes diversas", "Comprende el tiempo histórico", "Elabora explicaciones sobre procesos históricos"],
-        "enfoque": "Análisis histórico, geográfico, procesos sociales y economía."
-    },
-    "Personal Social": {
-        "competencia": "Construye su identidad",
-        "capacidades": ["Se valora a sí mismo", "Autorregula sus emociones", "Reflexiona y argumenta éticamente"],
-        "enfoque": "Desarrollo socioemocional, ciudadanía, convivencia y autoconocimiento."
-    },
-    "Educación para el Trabajo": {
-        "competencia": "Gestiona proyectos de emprendimiento económico o social",
-        "capacidades": ["Crea propuestas de valor", "Trabaja cooperativamente para lograr objetivos y metas", "Aplica habilidades técnicas"],
-        "enfoque": "Diseño de proyectos, electrónica, robótica, emprendimiento, modelo canvas y habilidades técnicas."
-    },
-    "Matemática": {
-        "competencia": "Resuelve problemas de cantidad",
-        "capacidades": ["Traduce cantidades a expresiones numéricas", "Comunica su comprensión sobre los números y las operaciones"],
-        "enfoque": "Razonamiento numérico, álgebra, geometría, cálculo y estadística."
-    },
-    "Comunicación": {
-        "competencia": "Lee diversos tipos de textos escritos en su lengua materna",
-        "capacidades": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto"],
-        "enfoque": "Comprensión lectora, gramática, ortografía, lírica, narrativa y comunicación oral."
-    },
-    "Educación Física": {
-        "competencia": "Se desenvuelve de manera autónoma a través de su motricidad",
-        "capacidades": ["Comprende su cuerpo", "Se expresa corporalmente"],
-        "enfoque": "Desarrollo motriz, expresión corporal, deportes, atletismo y vida saludable."
-    },
-    "Arte y Cultura": {
-        "competencia": "Crea proyectos desde los lenguajes artísticos",
-        "capacidades": ["Explora y experimenta los lenguajes del arte", "Aplica procesos creativos"],
-        "enfoque": "Expresión plástica, pintura, dibujo, música, danza, teatro y patrimonio cultural."
-    },
-    "Educación Religiosa": {
-        "competencia": "Construye su identidad como persona humana, amada por Dios",
-        "capacidades": ["Conoce a Dios y asume su identidad religiosa", "Cultiva y valora las manifestaciones religiosas"],
-        "enfoque": "Formación espiritual, ética cristiana, valores y parábolas."
-    }
-}
+PROMPT_EVALUACION_RAG = """
+Eres un especialista curricular experto del Ministerio de Educación del Perú (MINEDU / CNEB).
+Evalúa de forma analítica y rigurosa si el tema ingresado por el docente se desarrolla curricularmente en el área seleccionada, o si su pertinencia pedagógica principal corresponde a otra área del Currículo Nacional (CNEB).
 
+Nivel educativo: {nivel}
+Área seleccionada por el docente: {area_seleccionada}
+Tema de la sesión: "{tema}"
 
-def _limpiar_texto(texto: str) -> str:
-    """Normaliza texto eliminando acentos, diacríticos y convirtiendo a minúsculas."""
-    if not texto:
-        return ""
-    texto_norm = unicodedata.normalize('NFD', texto)
-    texto_sin_acentos = ''.join(c for c in texto_norm if unicodedata.category(c) != 'Mn')
-    return texto_sin_acentos.lower().strip()
+Contexto relevante extraído del CNEB (Qdrant Vector DB):
+{contexto_rag}
 
+Instrucciones:
+1. Si el tema "{tema}" pertenece, se aborda o es afín al área "{area_seleccionada}", responde en JSON con "coincide": true.
+2. Si el tema "{tema}" NO pertenece al área "{area_seleccionada}" (por ejemplo "circuito electrónico" en Comunicación, "sistema nervioso" en Educación Física, "fotosíntesis" en Comunicación, "revolución francesa" en Matemática), responde con "coincide": false, identificando el área adecuada del CNEB, su competencia oficial, capacidades y una explicación pedagógica clara.
+3. Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura exacta:
 
-def detectar_area_pedagogica(tema_limpio: str) -> Optional[str]:
-    """Clasificador semántico del tema usando patrones amplios del CNEB."""
-    t = tema_limpio
-
-    # 1. Ciencia y Tecnología (Biología, Anatomía, Física, Química, Ecología)
-    palabras_ciencia = [
-        "sistema nervioso", "nervioso", "cerebro", "neurona", "medula", "celula", "organelo", "mitocondria",
-        "fotosinte", "seres vivos", "ser vivo", "reino animal", "reino vegetal", "fungi", "bacterias", "virus",
-        "ecosistema", "biodiversidad", "movimiento", "rectilineo", "mru", "mrv", "gravedad", "velocidad",
-        "aceleracion", "fuerza", "vector", "cinematica", "energia", "materia", "atomo", "molecula", "quimica",
-        "fisica", "biologia", "aparato digestivo", "digestiv", "circulatorio", "respiratorio", "excretor",
-        "esqueleto", "hueso", "musculo", "adn", "genetica", "termodinamica", "experimento", "planeta", "clima global"
-    ]
-    if any(p in t for p in palabras_ciencia):
-        return "Ciencia y Tecnología"
-
-    # 2. Educación para el Trabajo (EPT)
-    palabras_ept = [
-        "circuito", "electron", "electric", "robotic", "programaci", "software", "mantenimiento", "carpinteri",
-        "emprend", "negocio", "canvas", "modelo de negocio", "propuesta de valor", "mercadotecnia", "presupuesto",
-        "soldadura", "confeccion", "textil", "habilidades tecnicas", "inventario", "taller digital"
-    ]
-    if any(p in t for p in palabras_ept):
-        return "Educación para el Trabajo"
-
-    # 3. Ciencias Sociales (Historia, Geografía, Economía)
-    palabras_ccss = [
-        "revoluci", "guerra", "independencia", "historia", "mapa", "geograf", "feudalism", "imperio", "cultura",
-        "virreinato", "incas", "tahuantinsuyo", "preinca", "chavin", "mochica", "nazca", "paracas", "primer gobierno",
-        "guerra del pacifico", "revolucion industrial", "constitucion", "relieve", "cuenca", "economia", "mercado"
-    ]
-    if any(p in t for p in palabras_ccss):
-        return "Ciencias Sociales"
-
-    # 4. Personal Social / DPCC
-    palabras_psocial = [
-        "emocion", "sentimient", "autoestima", "identidad", "convivenc", "norma", "derecho", "valores", "etica",
-        "pubertad", "adolescencia", "resolucion de conflictos", "bullying", "ciudadania", "participacion"
-    ]
-    if any(p in t for p in palabras_psocial):
-        return "Personal Social"
-
-    # 5. Matemática
-    palabras_mate = [
-        "suma", "resta", "multiplica", "division", "fraccion", "porcentaje", "ecuacion", "inecuacion", "geometr",
-        "angulo", "triangulo", "area", "perimetro", "probabilidad", "algebra", "polinomio", "estadistica",
-        "regla de tres", "razon", "proporcion", "trigonometria", "plano cartesiano", "volumen", "matematica"
-    ]
-    if any(p in t for p in palabras_mate):
-        return "Matemática"
-
-    # 6. Comunicación
-    palabras_comu = [
-        "cuento", "lectura", "poes", "poema", "afiche", "ensayo", "ortograf", "gramatic", "redacci", "debate",
-        "leyenda", "fabula", "comprension lectora", "novela", "obra literaria", "oratoria", "discurso", "sintaxis"
-    ]
-    if any(p in t for p in palabras_comu):
-        return "Comunicación"
-
-    # 7. Educación Física
-    palabras_edfis = [
-        "motricid", "esquema corporal", "deporte", "ejercicio", "gimnas", "futbol", "basquet", "voley",
-        "atletismo", "calentamiento", "resistencia", "flexibilidad", "actividad fisica", "juego predeportivo"
-    ]
-    if any(p in t for p in palabras_edfis):
-        return "Educación Física"
-
-    # 8. Arte y Cultura
-    palabras_arte = [
-        "dibujo", "pintura", "escultura", "grabado", "musica", "instrumento", "ritmo", "melodia", "danza",
-        "baile", "teatro", "dramatizac", "artes plasticas", "folclore", "manifestacion artistica", "acuarela"
-    ]
-    if any(p in t for p in palabras_arte):
-        return "Arte y Cultura"
-
-    # 9. Educación Religiosa
-    palabras_religion = [
-        "dios", "jesus", "biblia", "evangelio", "parabola", "mandamiento", "sacramento", "oracion", "virgen maria", "fe"
-    ]
-    if any(p in t for p in palabras_religion):
-        return "Educación Religiosa"
-
-    return None
+{{
+  "coincide": true | false,
+  "es_multiarea": false,
+  "mensaje_evaluacion": "Mensaje pedagógico claro orientando al docente",
+  "recomendaciones": [
+    {{
+      "area": "Nombre del Área Sugerida",
+      "competencia": "Nombre exacto de la competencia CNEB",
+      "capacidades": ["Capacidad 1", "Capacidad 2"],
+      "enfoque_explicacion": "Explicación breve de por qué este tema pertenece a esta área."
+    }}
+  ]
+}}
+"""
 
 
 def obtener_recomendacion_curricular(req: RecommendRequest) -> Dict[str, Any]:
-    """Evalúa si el tema coincide adecuadamente o sugiere el área oficial correspondiente."""
-    tema_limpio = _limpiar_texto(req.tema)
-    area_actual_limpia = _limpiar_texto(req.area_seleccionada)
+    """
+    Evalúa dinámicamente cualquier tema usando Qdrant RAG + Gemini LLM.
+    """
+    logger.info("Copiloto RAG evaluando tema '%s' para el área '%s' (%s)", req.tema, req.area_seleccionada, req.nivel)
 
-    logger.info("Copiloto RAG evaluando tema '%s' (normalizado: '%s') para el área '%s'", req.tema, tema_limpio, req.area_seleccionada)
-
-    # 1. Búsqueda vectorial semántica en Qdrant DB para enriquecer el contexto
-    qdrant_area_detectada = None
+    # 1. Recuperar contexto semántico de Qdrant (1,217 chunks del CNEB)
+    contexto_rag = ""
     try:
         chunks = search(query=f"Área curricular competencias para el tema {req.tema}", filters={"nivel": req.nivel}, top_k=3)
-        for c in chunks:
-            text = c.get("text", "")
-            for area_nombre in AREAS_CNEB_INFO:
-                if area_nombre.lower() in text.lower():
-                    qdrant_area_detectada = area_nombre
-                    break
-            if qdrant_area_detectada:
-                break
+        textos_chunks = [c.get("text", "") for c in chunks if c.get("text")]
+        if textos_chunks:
+            contexto_rag = "\n---\n".join(textos_chunks[:2])
     except Exception as e:
-        logger.warning("Qdrant RAG aviso: %s", str(e))
+        logger.warning("Aviso Qdrant retriever: %s", str(e))
 
-    # 2. Detectar área real sugerida (prioridad clasificador pedagógico -> Qdrant)
-    area_sugerida = detectar_area_pedagogica(tema_limpio) or qdrant_area_detectada
+    # 2. Evaluación Dinámica con Gemini AI (LLM Principal)
+    active_client = genai_client or (genai.Client(api_key=GOOGLE_API_KEY) if GOOGLE_API_KEY else None)
+    if active_client:
+        try:
+            prompt = PROMPT_EVALUACION_RAG.format(
+                nivel=req.nivel,
+                area_seleccionada=req.area_seleccionada,
+                tema=req.tema,
+                contexto_rag=contexto_rag or "Sin contexto vectorial adicional."
+            )
 
-    # 3. Si se detectó un área específica y no coincide con el área seleccionada
-    if area_sugerida:
-        area_sugerida_limpia = _limpiar_texto(area_sugerida)
-        if area_sugerida_limpia != area_actual_limpia:
-            info_area = AREAS_CNEB_INFO.get(area_sugerida, {
-                "competencia": f"Competencia oficial del área de {area_sugerida}",
-                "capacidades": ["Capacidad CNEB del área"],
-                "enfoque": f"Enfoque pedagógico de {area_sugerida}"
-            })
+            # Usar gemini-3.1-flash-lite con cuotas y velocidad optimizadas
+            response = active_client.models.generate_content(
+                model="gemini-3.1-flash-lite",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2
+                )
+            )
 
-            return {
-                "coincide": False,
-                "es_multiarea": False,
-                "mensaje_evaluacion": f"La IA detectó que el tema '{req.tema}' se desarrolla habitualmente en el área de {area_sugerida} mediante la competencia '{info_area['competencia']}'. Actualmente seleccionaste {req.area_seleccionada}. Puedes adaptar la recomendación o mantener tu selección.",
-                "recomendaciones": [
-                    {
-                        "area": area_sugerida,
-                        "competencia": info_area["competencia"],
-                        "capacidades": info_area["capacidades"],
-                        "enfoque_explicacion": f"Según el Currículo Nacional (CNEB), el tema '{req.tema}' corresponde a las competencias del área de {area_sugerida}."
-                    }
-                ]
-            }
+            if response and response.text:
+                parsed = json.loads(response.text)
+                if "coincide" in parsed and "mensaje_evaluacion" in parsed:
+                    return parsed
+        except Exception as e:
+            logger.error("Error en Gemini LLM recommendation RAG: %s", str(e))
 
-    # 4. Si coincide verdaderamente
+    # Fallback seguro en caso extremo de falla de red/API key
     return {
         "coincide": True,
         "es_multiarea": False,
-        "mensaje_evaluacion": f"Excelente. El tema '{req.tema}' coincide adecuadamente con el área y competencia seleccionadas según el Currículo Nacional.",
+        "mensaje_evaluacion": f"El tema '{req.tema}' fue registrado para el área {req.area_seleccionada}.",
         "recomendaciones": []
     }
