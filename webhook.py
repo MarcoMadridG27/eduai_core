@@ -333,7 +333,8 @@ def format_lesson_summary(lesson_data: dict, session_id: str) -> str:
     comp_list = lesson_data.get("competenciasSeleccionadas") or []
     competencies = ", ".join(comp_list) if comp_list else "No especificadas"
 
-    frontend_url = os.getenv("FRONTEND_URL", "https://eduai-app.vercel.app")
+    frontend_url = os.getenv("FRONTEND_URL", "https://sesionmas.online")
+
     link = f"{frontend_url}/repositorio/{session_id}"
 
     summary = (

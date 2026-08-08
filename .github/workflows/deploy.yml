@@ -105,8 +105,14 @@ jobs:
                   - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
                   - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
                   - DB_NAME=/app/data/lesson_memory.db
+                  - FRONTEND_URL=${FRONTEND_URL}
+                  - AUTH_URL=${AUTH_URL}
+                  - WHATSAPP_TOKEN=${WHATSAPP_TOKEN}
+                  - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+                  - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
                 volumes:
                   - core_data:/app/data
+
                 depends_on:
                   qdrant:
                     condition: service_healthy
