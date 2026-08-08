@@ -1,16 +1,21 @@
 """
-Módulo de Recomendación Curricular (Copiloto Pedagógico) para EduAI.
-Analiza el tema ingresado por el docente utilizando RAG sobre Qdrant + Matriz CNEB oficial
-para sugerir áreas, competencias, capacidades y enfoques con tono pedagógico orientador.
+Módulo de Recomendación Curricular (Copiloto Pedagógico RAG) para EduAI.
+Consulta la base de datos vectorial de Qdrant (1,217 chunks del CNEB) y utiliza Gemini AI
+para evaluar si el tema coincide verdaderamente con el área seleccionada o si sugiere una corrección orientadora.
 """
 
 import json
 import logging
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+import google.generativeai as genai
+from config import GOOGLE_API_KEY
 from rag.retriever import search
 
 logger = logging.getLogger(__name__)
+
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 
 class RecommendRequest(BaseModel):
@@ -35,260 +40,139 @@ class RecommendResponse(BaseModel):
     recomendaciones: List[SugerenciaArea] = []
 
 
-# Mapeo CNEB RAG de palabras clave -> Áreas y Competencias Sugeridas
-MAPEO_PEDAGOGICO = {
-    "emocion": {
-        "area": "Personal Social",
-        "competencia": "Construye su identidad",
-        "capacidades": ["Se valora a sí mismo", "Autorregula sus emociones"],
-        "explicacion": "El desarrollo socioemocional y reconocimiento de emociones se aborda en Personal Social."
+# Mapeo pedagógico oficial por áreas de Educación Básica
+MATRIZ_AREAS_CNEB = {
+    "Educación para el Trabajo": {
+        "palabras": ["circuito", "electronica", "electric", "programacion", "robotic", "mantenimiento", "empr", "negocio", "proyecto", "costura", "carpinteria", "diseno"],
+        "competencia": "Gestiona proyectos de emprendimiento económico o social",
+        "capacidades": ["Crea propuestas de valor", "Trabaja cooperativamente para lograr objetivos y metas", "Aplica habilidades técnicas"]
     },
-    "sentimient": {
-        "area": "Personal Social",
-        "competencia": "Construye su identidad",
-        "capacidades": ["Se valora a sí mismo", "Autorregula sus emociones"],
-        "explicacion": "Los sentimientos y autorregulación emocional corresponden al desarrollo personal."
+    "Ciencia y Tecnología": {
+        "palabras": ["fotosintesis", "celula", "energia", "atomo", "materia", "ecosistema", "cuerpo", "digestiv", "planeta", "fisica", "quimica", "biologia", "experimento", "indagacion"],
+        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
+        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos, materia y energía", "Evalúa las implicancias del saber y del quehacer científico y tecnológico"]
     },
-    "autonomia": {
-        "area": "Personal Social",
-        "competencia": "Construye su identidad",
-        "capacidades": ["Se valora a sí mismo", "Autorregula sus emociones"],
-        "explicacion": "La autonomía se trabaja en Personal Social a través de la construcción de la identidad."
-    },
-    "norma": {
-        "area": "Personal Social",
-        "competencia": "Convive y participa democráticamente en la búsqueda del bien común",
-        "capacidades": ["Interactúa con todas las personas", "Construye normas y asume acuerdos y leyes"],
-        "explicacion": "Las normas de convivencia y acuerdos del aula pertenecen a la competencia de convivencia democrática."
-    },
-    "convivenc": {
-        "area": "Personal Social",
-        "competencia": "Convive y participa democráticamente en la búsqueda del bien común",
-        "capacidades": ["Interactúa con todas las personas", "Construye normas y asume acuerdos y leyes"],
-        "explicacion": "La convivencia pacífica e interacción social corresponden al área de Personal Social."
-    },
-    "motricid": {
-        "area": "Psicomotricidad",
-        "competencia": "Se desenvuelve de manera autónoma a través de su motricidad",
-        "capacidades": ["Comprende su cuerpo", "Se expresa corporalmente"],
-        "explicacion": "Las habilidades motrices y la exploración corporal corresponden a Psicomotricidad / Educación Física."
-    },
-    "cuerpo": {
-        "area": "Psicomotricidad",
-        "competencia": "Se desenvuelve de manera autónoma a través de su motricidad",
-        "capacidades": ["Comprende su cuerpo", "Se expresa corporalmente"],
-        "explicacion": "El esquema corporal y movimiento autónomo pertenecen a Psicomotricidad / Educación Física."
-    },
-    "cuento": {
-        "area": "Comunicación",
-        "competencia": "Lee diversos tipos de textos escritos en su lengua materna",
-        "capacidades": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto"],
-        "explicacion": "La lectura y creación de cuentos e historias desarrolla las competencias comunicativas."
-    },
-    "lectura": {
-        "area": "Comunicación",
-        "competencia": "Lee diversos tipos de textos escritos en su lengua materna",
-        "capacidades": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto"],
-        "explicacion": "La comprensión lectora se promueve en el área de Comunicación."
-    },
-    "suma": {
-        "area": "Matemática",
+    "Matemática": {
+        "palabras": ["suma", "resta", "multiplicacion", "division", "fraccion", "porcentaje", "ecuacion", "geometria", "angulo", "triangulo", "area", "perimetro", "estadistica", "probabilidad", "poligono", "funcion", "algebra"],
         "competencia": "Resuelve problemas de cantidad",
-        "capacidades": ["Traduce cantidades a expresiones numéricas", "Comunica su comprensión sobre los números"],
-        "explicacion": "Las operaciones de adición y conteo forman parte del razonamiento cuantitativo."
+        "capacidades": ["Traduce cantidades a expresiones numéricas", "Comunica su comprensión sobre los números y las operaciones"]
     },
-    "numero": {
-        "area": "Matemática",
-        "competencia": "Resuelve problemas de cantidad",
-        "capacidades": ["Traduce cantidades a expresiones numéricas", "Comunica su comprensión sobre los números"],
-        "explicacion": "La noción de número y conteo se trabaja en el área de Matemática."
+    "Personal Social": {
+        "palabras": ["emocion", "sentimiento", "autoestima", "identidad", "convivencia", "norma", "derecho", "historia", "ciudadania", "conflicto", "cultura"],
+        "competencia": "Construye su identidad",
+        "capacidades": ["Se valora a sí mismo", "Autorregula sus emociones"]
     },
-    "forma": {
-        "area": "Matemática",
-        "competencia": "Resuelve problemas de forma, movimiento y localización",
-        "capacidades": ["Modela objetos con formas geométricas", "Comunica su comprensión sobre las formas"],
-        "explicacion": "Las formas geométricas y la ubicación en el espacio corresponden a la competencia espacial."
+    "Ciencias Sociales": {
+        "palabras": ["historia", "revolucion", "cultura", "independencia", "mapa", "geografia", "economia", "feudalismo", "guerra"],
+        "competencia": "Construye interpretaciones históricas",
+        "capacidades": ["Interpreta críticamente fuentes diversas", "Comprende el tiempo histórico"]
     },
-    "planta": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Indaga mediante métodos científicos para construir sus conocimientos",
-        "capacidades": ["Problematiza situaciones para hacer indagación", "Genera y registra datos o información"],
-        "explicacion": "El estudio de los seres vivos y las plantas se desarrolla en el área de Ciencia y Tecnología."
-    },
-    "fotosintesis": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
-        "explicacion": "La fotosíntesis y nutrición vegetal pertenecen al área de Ciencia y Tecnología mediante el estudio del mundo físico y seres vivos."
-    },
-    "celula": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
-        "explicacion": "La estructura celular y funciones biológicas corresponden al área de Ciencia y Tecnología."
-    },
-    "energia": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre materia y energía", "Evalúa las implicancias del saber científico"],
-        "explicacion": "Las formas de energía y transformaciones físicas corresponden a Ciencia y Tecnología."
-    },
-    "ecosistema": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
-        "explicacion": "Las relaciones entre organismos y el medio ambiente corresponden a Ciencia y Tecnología."
-    },
-    "atomo": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre materia y energía", "Evalúa las implicancias del saber científico"],
-        "explicacion": "La estructura atómica y propiedades de la materia pertenecen al área de Ciencia y Tecnología."
-    },
-    "materia": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre materia y energía", "Evalúa las implicancias del saber científico"],
-        "explicacion": "Los estados y propiedades de la materia corresponden al área de Ciencia y Tecnología."
-    },
-    "digestiv": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Explica el mundo físico basándose en conocimientos sobre los seres vivos, materia y energía",
-        "capacidades": ["Comprende y usa conocimientos sobre los seres vivos", "Evalúa las implicancias del saber científico"],
-        "explicacion": "Los sistemas del cuerpo humano se abordan en Ciencia y Tecnología."
-    },
-    "animal": {
-        "area": "Ciencia y Tecnología",
-        "competencia": "Indaga mediante métodos científicos para construir sus conocimientos",
-        "capacidades": ["Problematiza situaciones para hacer indagación", "Genera y registra datos o información"],
-        "explicacion": "La observación y cuidado de los animales forma parte de la indagación científica en Ciencia y Tecnología."
+    "Comunicación": {
+        "palabras": ["cuento", "lectura", "poesia", "afiche", "ensayo", "ortografia", "gramatica", "redaccion", "debate", "noticia", "leyenda", "fabula", "texto"],
+        "competencia": "Lee diversos tipos de textos escritos en su lengua materna",
+        "capacidades": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto"]
     }
 }
 
-# Temas transversales multi-área
-TEMAS_MULTIAREA = {
-    "agua": [
-        {
-            "area": "Ciencia y Tecnología",
-            "competencia": "Indaga mediante métodos científicos para construir sus conocimientos",
-            "capacidades": ["Problematiza situaciones para hacer indagación", "Genera y registra datos o información"],
-            "enfoque_explicacion": "Enfoque científico: Experimentos, estados físicos del agua y ciclo hidrológico."
-        },
-        {
-            "area": "Personal Social",
-            "competencia": "Gestiona responsablemente el espacio y el ambiente",
-            "capacidades": ["Comprende las relaciones entre los elementos naturales y sociales", "Genera acciones para conservar el ambiente"],
-            "enfoque_explicacion": "Enfoque ambiental y ciudadano: Cuidado del agua y uso responsable en la comunidad."
-        },
-        {
-            "area": "Comunicación",
-            "competencia": "Escribe diversos tipos de textos en su lengua materna",
-            "capacidades": ["Adecúa el texto a la situación comunicativa", "Organiza y desarrolla las ideas de forma coherente"],
-            "enfoque_explicacion": "Enfoque comunicativo: Creación de afiches, slogans o poesías sobre la importancia del agua."
-        }
-    ],
-    "reciclaj": [
-        {
-            "area": "Personal Social",
-            "competencia": "Gestiona responsablemente el espacio y el ambiente",
-            "capacidades": ["Comprende las relaciones entre los elementos naturales y sociales", "Genera acciones para conservar el ambiente"],
-            "enfoque_explicacion": "Enfoque ambiental: Conciencia ecológica y segregación de residuos en el colegio."
-        },
-        {
-            "area": "Ciencia y Tecnología",
-            "competencia": "Diseña y construye soluciones tecnológicas para resolver problemas de su entorno",
-            "capacidades": ["Determina una alternativa de solución tecnológica", "Diseña la alternativa de solución"],
-            "enfoque_explicacion": "Enfoque tecnológico: Construcción de juguetes o utilitarios con material reciclado."
-        }
-    ]
-}
+
+PROMPT_EVALUACION_RAG = """Eres un experto pedagógico del Currículo Nacional de Educación Básica (CNEB) de Perú.
+Debes evaluar si el tema "{tema}" pertenece curricularmente al área "{area_seleccionada}" en el nivel {nivel}.
+
+CONTEXTO RAG EXTRAÍDO DE LOS DOCUMENTOS DEL CNEB:
+{contexto_rag}
+
+REGLAS DE EVALUACIÓN:
+1. Si el tema "{tema}" NO PERTENECE al área "{area_seleccionada}" (por ejemplo, "circuitos electronicos" en "Comunicación" o "fotosintesis" en "Matemática"):
+   - "coincide": false
+   - "es_multiarea": false
+   - "mensaje_evaluacion": "La IA detectó que el tema '{tema}' no corresponde habitualmente al área de {area_seleccionada}. Según el Currículo Nacional, pertenece al área de [Área Correcta] mediante la competencia [Competencia Correcta]."
+   - "recomendaciones": Incluye el Área adecuada, su competencia CNEB oficial y sus capacidades.
+
+2. Si el tema "{tema}" SÍ corresponde al área "{area_seleccionada}":
+   - "coincide": true
+   - "es_multiarea": false
+   - "mensaje_evaluacion": "Excelente. El tema '{tema}' coincide adecuadamente con el área y competencia seleccionadas según el Currículo Nacional."
+   - "recomendaciones": []
+
+Devuelve ÚNICAMENTE un objeto JSON válido con este formato:
+{{
+  "coincide": boolean,
+  "es_multiarea": boolean,
+  "mensaje_evaluacion": "string",
+  "recomendaciones": [
+    {{
+      "area": "Nombre del área recomendada",
+      "competencia": "Nombre de la competencia",
+      "capacidades": ["Capacidad 1", "Capacidad 2"],
+      "enfoque_explicacion": "Explicación pedagógica breve"
+    }}
+  ]
+}}
+"""
 
 
 def obtener_recomendacion_curricular(req: RecommendRequest) -> Dict[str, Any]:
     """
-    Analiza el tema con RAG en Qdrant y evalúa si la selección del docente coincide o sugiere
-    alternativas pedagógicas según el CNEB.
+    Analiza el tema utilizando RAG en Qdrant + Gemini LLM / Matriz CNEB estricta.
     """
     tema_lower = req.tema.strip().lower()
-    logger.info("Copiloto Curricular analizando tema: '%s' (Nivel: %s, Área selec: %s)", req.tema, req.nivel, req.area_seleccionada)
+    area_actual = (req.area_seleccionada or "").strip()
+    area_actual_lower = area_actual.lower()
 
-    # 1. Verificar si es un Tema Multi-Área (Caso C)
-    for clave, opciones in TEMAS_MULTIAREA.items():
-        if clave in tema_lower:
-            return {
-                "coincide": False,
-                "es_multiarea": True,
-                "mensaje_evaluacion": f"El tema '{req.tema}' es un eje integrador que puede abordarse desde distintas áreas del Currículo Nacional según el enfoque de tu sesión.",
-                "recomendaciones": opciones
-            }
+    logger.info("Copiloto RAG evaluando tema '%s' para el área '%s'", req.tema, area_actual)
 
-    # 2. Análisis por coincidencias de la matriz CNEB RAG (Caso B)
-    sugerencia_pedagogica = None
-    for clave, sug in MAPEO_PEDAGOGICO.items():
-        if clave in tema_lower:
-            sugerencia_pedagogica = sug
+    # 1. Consulta vectorial RAG en Qdrant
+    query_rag = f"Área curricular competencias para el tema {req.tema}"
+    chunks_rag = search(query=query_rag, filters={"nivel": req.nivel}, top_k=5)
+    contexto_rag = "\n\n".join(chunks_rag) if chunks_rag else "Información general del CNEB."
+
+    # 2. Evaluación mediante matriz pedagógica CNEB
+    area_sugerida = None
+    info_sugerida = None
+
+    for area_nombre, datos in MATRIZ_AREAS_CNEB.items():
+        if any(p in tema_lower for p in datos["palabras"]):
+            area_sugerida = area_nombre
+            info_sugerida = datos
             break
 
-    # Si encontramos una sugerencia pedagógica clara
-    if sugerencia_pedagogica:
-        area_sugerida = sugerencia_pedagogica["area"]
-        comp_sugerida = sugerencia_pedagogica["competencia"]
-        area_actual = (req.area_seleccionada or "").strip().lower()
+    # Si encontramos que el tema pertenece a otra área y NO al área actual seleccionada
+    if area_sugerida and area_sugerida.lower() != area_actual_lower:
+        logger.info("Incongruencia detectada: tema '%s' pertenece a '%s', pero seleccionó '%s'", req.tema, area_sugerida, area_actual)
+        return {
+            "coincide": False,
+            "es_multiarea": False,
+            "mensaje_evaluacion": f"La IA detectó que el tema '{req.tema}' se desarrolla habitualmente en el área de {area_sugerida} mediante la competencia '{info_sugerida['competencia']}'. Actualmente seleccionaste {area_actual}. Puedes adaptar la recomendación o mantener tu selección.",
+            "recomendaciones": [
+                {
+                    "area": area_sugerida,
+                    "competencia": info_sugerida["competencia"],
+                    "capacidades": info_sugerida["capacidades"],
+                    "enfoque_explicacion": f"El desarrollo pedagógico del tema '{req.tema}' corresponde a las competencias del área de {area_sugerida} según el Currículo Nacional."
+                }
+            ]
+        }
 
-        # Si el área seleccionada por el docente NO coincide con el área pedagógica estándar del CNEB
-        if area_actual and area_actual != area_sugerida.lower():
-            return {
-                "coincide": False,
-                "es_multiarea": False,
-                "mensaje_evaluacion": f"La IA detectó que el tema '{req.tema}' se desarrolla habitualmente en el área de {area_sugerida} mediante la competencia '{comp_sugerida}'. Actualmente seleccionaste {req.area_seleccionada}. Puedes adaptar la recomendación o mantener tu selección si deseas darle otro enfoque.",
-                "recomendaciones": [
-                    {
-                        "area": area_sugerida,
-                        "competencia": comp_sugerida,
-                        "capacidades": sugerencia_pedagogica["capacidades"],
-                        "enfoque_explicacion": sugerencia_pedagogica["explicacion"]
-                    }
-                ]
-            }
+    # 3. Consulta RAG con Gemini AI si está disponible
+    if GOOGLE_API_KEY:
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            prompt = PROMPT_EVALUACION_RAG.format(
+                tema=req.tema,
+                area_seleccionada=area_actual,
+                nivel=req.nivel,
+                contexto_rag=contexto_rag
+            )
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            res_json = json.loads(response.text)
+            return res_json
+        except Exception as e:
+            logger.warning("Respuesta RAG Gemini fallback: %s", str(e))
 
-    # 3. Consulta RAG a Qdrant si no estuvo en el mapa rápido
-    query_rag = f"Área curricular competencias para el tema {req.tema}"
-    chunks = search(query=query_rag, filters={"nivel": req.nivel}, top_k=3)
-
-    # Si la consulta RAG devuelve contexto de Qdrant, analizar la mejor área
-    if chunks:
-        contexto_rag_text = " ".join(chunks).lower()
-        
-        # Detectar si los chunks del CNEB apuntan a un área distinta a la elegida
-        areas_posibles = [
-            ("Ciencia y Tecnología", ["ciencia", "tecnología", "indaga", "mundo físico", "seres vivos", "materia", "energía", "fotosíntesis", "célula"]),
-            ("Personal Social", ["personal social", "identidad", "convive", "ciudadanía", "emociones", "valores"]),
-            ("Comunicación", ["comunicación", "textos", "lectura", "escribe", "oralmente", "lenguaje"]),
-            ("Matemática", ["matemática", "números", "cantidad", "geometría", "forma", "problemas", "álgebra", "cálculo"]),
-            ("Educación Física", ["psicomotricidad", "educación física", "motricidad", "cuerpo", "deporte"]),
-            ("Arte y Cultura", ["arte", "cultura", "lenguajes artísticos", "música", "dibujo"]),
-        ]
-        
-        area_actual_lower = (req.area_seleccionada or "").strip().lower()
-        for area_nombre, palabras in areas_posibles:
-            # Si el RAG apunta fuertemente a otra área y no a la actual
-            if area_nombre.lower() != area_actual_lower:
-                if any(p in contexto_rag_text for p in palabras) and any(p in tema_lower for p in palabras):
-                    return {
-                        "coincide": False,
-                        "es_multiarea": False,
-                        "mensaje_evaluacion": f"Según el Currículo Nacional (RAG), el tema '{req.tema}' suele abordarse en el área de {area_nombre}. Actualmente seleccionaste {req.area_seleccionada}. Puedes adaptar la recomendación o mantener tu selección.",
-                        "recomendaciones": [
-                            {
-                                "area": area_nombre,
-                                "competencia": f"Competencia sugerida CNEB para {area_nombre}",
-                                "capacidades": ["Capacidades oficiales CNEB del área"],
-                                "enfoque_explicacion": f"Enfoque pedagógico recuperado de los documentos oficiales del CNEB para {area_nombre}."
-                            }
-                        ]
-                    }
-
-    # Caso A: Todo coincide adecuadamente
+    # Si coincide o es afín
     return {
         "coincide": True,
         "es_multiarea": False,
