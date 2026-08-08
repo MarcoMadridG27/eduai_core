@@ -18,6 +18,7 @@ app = FastAPI(
 )
 
 from webhook import router as whatsapp_router
+from recommendation import RecommendRequest, RecommendResponse, obtener_recomendacion_curricular
 app.include_router(whatsapp_router)
 
 
@@ -85,6 +86,20 @@ app.add_middleware(
 @app.get("/")
 def home():
     return {"status": "ok", "message": "Generador de sesiones educativas corriendo (v2) 🚀"}
+
+
+@app.post("/api/recommend-curriculum")
+async def recommend_curriculum(req: RecommendRequest):
+    """
+    Endpoint para el Copiloto Curricular Inteligente.
+    Analiza el tema con RAG (Qdrant) y Gemini para orientar al docente.
+    """
+    try:
+        res = await asyncio.to_thread(obtener_recomendacion_curricular, req)
+        return res
+    except Exception as e:
+        logger.error("Error en recommend-curriculum: %s", str(e))
+        raise HTTPException(status_code=500, detail="Error analizando recomendación curricular")
 
 
 async def read_request_payload(request: Request):
