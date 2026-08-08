@@ -224,7 +224,42 @@ async def process_whatsapp_message_async(
         # 4. Sincronizar sesion con el microservicio de autenticacion global (PostgreSQL)
         await sync_session_to_auth(session_id, normalized_data, result)
         
-        # 5. Dar formato al resumen y enviar mensaje de respuesta final al usuario
+        # 5. Generar y enviar el documento PDF al usuario
+        pdf_url = os.getenv("PDF_RENDER_API_URL", "https://api.sesionmas.online/api/pdf")
+
+
+        try:
+            # Consolidar datos de la sesion para la API de renderizado PDF
+            session_data = {
+                **normalized_data,
+                **result,
+                "session_id": session_id,
+                "id": session_id,
+                "is_public": True,
+                "author_name": "Bot de WhatsApp",
+                "likes": 0,
+            }
+            # Formatear nombre de archivo seguro
+            safe_theme = "".join(c if c.isalnum() else "_" for c in normalized_data.get("tema", "aprendizaje"))
+            safe_filename = f"Sesion_{safe_theme}.pdf"
+            
+            logger.info(f"Llamando a pdf-render en: {pdf_url}/generate-pdf para la sesion {session_id}")
+            async with httpx.AsyncClient() as client:
+                pdf_resp = await client.post(f"{pdf_url}/generate-pdf", json={"data": session_data}, timeout=45.0)
+                if pdf_resp.status_code == 200:
+                    logger.info(f"PDF generado exitosamente ({len(pdf_resp.content)} bytes). Cargando a Meta...")
+                    media_id = await upload_whatsapp_media(phone_number_id, pdf_resp.content, safe_filename)
+                    if media_id:
+                        caption = f"✨ *¡Sesión de Aprendizaje Lista!* ✨\n\nAquí tienes tu planificación completa para *{normalized_data.get('tema')}* ({normalized_data.get('grado')}) generada por *EduAI*. 🚀\n\n¡Espero que te sea de gran utilidad en el aula!"
+                        await send_whatsapp_document(phone_number_id, from_phone, media_id, safe_filename, caption)
+                    else:
+                        logger.error("No se pudo obtener el media_id de Meta.")
+                else:
+                    logger.error(f"Fallo en pdf-render ({pdf_resp.status_code}): {pdf_resp.text}")
+        except Exception as pdf_err:
+            logger.exception(f"Error critico en la generacion/envio del archivo PDF: {pdf_err}")
+
+        # 6. Dar formato al resumen y enviar mensaje de respuesta final al usuario (con link de la web)
         summary = format_lesson_summary(result, session_id)
         await send_whatsapp_message(phone_number_id, from_phone, summary)
         
@@ -232,6 +267,7 @@ async def process_whatsapp_message_async(
         logger.exception("Error en la tarea en segundo plano para procesar mensaje de WhatsApp")
         error_msg = "Lo siento, ocurrió un error inesperado al procesar tu solicitud. Por favor intenta de nuevo más tarde."
         await send_whatsapp_message(phone_number_id, from_phone, error_msg)
+
 
 
 
@@ -271,7 +307,86 @@ async def send_whatsapp_message(phone_number_id: str, to_phone: str, text_messag
             logger.error(f"Excepcion capturada al enviar mensaje a WhatsApp: {e}")
 
 
+async def upload_whatsapp_media(phone_number_id: str, media_bytes: bytes, filename: str) -> str:
+    """Sube un archivo binario a Meta y devuelve su media_id."""
+    whatsapp_token = os.getenv("WHATSAPP_TOKEN")
+    if not whatsapp_token:
+        logger.error("La variable WHATSAPP_TOKEN no está configurada en el entorno.")
+        return None
+
+    p_id = phone_number_id or os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    if not p_id:
+        logger.error("No se dispone del ID del número de teléfono de WhatsApp.")
+        return None
+
+    url = f"https://graph.facebook.com/v20.0/{p_id}/media"
+    headers = {
+        "Authorization": f"Bearer {whatsapp_token}"
+    }
+    
+    files = {
+        "file": (filename, media_bytes, "application/pdf")
+    }
+    data = {
+        "messaging_product": "whatsapp",
+        "type": "application/pdf"
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, data=data, files=files)
+            if response.status_code == 200:
+                resp_json = response.json()
+                media_id = resp_json.get("id")
+                logger.info(f"Archivo PDF subido exitosamente a Meta. Media ID: {media_id}")
+                return media_id
+            else:
+                logger.error(f"Error al subir media a Meta. Estatus: {response.status_code}, Cuerpo: {response.text}")
+        except Exception as e:
+            logger.exception(f"Excepción al subir media a Meta: {e}")
+    return None
+
+
+async def send_whatsapp_document(phone_number_id: str, to_phone: str, media_id: str, filename: str, caption: str):
+    """Envia un documento cargado en Meta usando su media_id."""
+    whatsapp_token = os.getenv("WHATSAPP_TOKEN")
+    if not whatsapp_token:
+        return
+        
+    p_id = phone_number_id or os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    if not p_id:
+        return
+
+    url = f"https://graph.facebook.com/v20.0/{p_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_phone,
+        "type": "document",
+        "document": {
+            "id": media_id,
+            "filename": filename,
+            "caption": caption
+        }
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, json=payload, headers=headers)
+            if response.status_code >= 400:
+                logger.error(f"Fallo al enviar PDF a WhatsApp. Estatus: {response.status_code}, Cuerpo: {response.text}")
+            else:
+                logger.info(f"PDF enviado exitosamente a {to_phone}")
+        except Exception as e:
+            logger.error(f"Excepcion al enviar PDF: {e}")
+
+
 async def sync_session_to_auth(session_id: str, normalized_data: dict, final_lesson: dict):
+
     """Sincroniza la sesion de aprendizaje generada con el backend de autenticacion global."""
     auth_url = os.getenv("AUTH_URL", "https://eduai-auth-1.onrender.com")
     email = "whatsapp@eduai.com"
@@ -333,7 +448,8 @@ def format_lesson_summary(lesson_data: dict, session_id: str) -> str:
     comp_list = lesson_data.get("competenciasSeleccionadas") or []
     competencies = ", ".join(comp_list) if comp_list else "No especificadas"
 
-    frontend_url = os.getenv("FRONTEND_URL", "https://eduai-app.vercel.app")
+    frontend_url = os.getenv("FRONTEND_URL", "https://sesionmas.online")
+
     link = f"{frontend_url}/repositorio/{session_id}"
 
     summary = (
