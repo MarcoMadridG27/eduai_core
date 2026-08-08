@@ -8,6 +8,7 @@ import json
 import logging
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+from google import genai
 from config import GOOGLE_API_KEY
 from rag.retriever import search
 
@@ -152,16 +153,17 @@ def obtener_recomendacion_curricular(req: RecommendRequest) -> Dict[str, Any]:
     # 3. Consulta RAG con Gemini AI si está disponible
     if GOOGLE_API_KEY:
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            client = genai.Client(api_key=GOOGLE_API_KEY)
             prompt = PROMPT_EVALUACION_RAG.format(
                 tema=req.tema,
                 area_seleccionada=area_actual,
                 nivel=req.nivel,
                 contexto_rag=contexto_rag
             )
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config={"response_mime_type": "application/json"}
             )
             res_json = json.loads(response.text)
             return res_json
