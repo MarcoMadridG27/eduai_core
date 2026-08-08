@@ -8,6 +8,7 @@ import json
 import logging
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+from config import GOOGLE_API_KEY
 from rag.retriever import search
 
 logger = logging.getLogger(__name__)

@@ -128,15 +128,28 @@ def search(
         # Construir filtro de payload
         qdrant_filter = _build_qdrant_filter(filters or {})
 
-        # Buscar en Qdrant
-        search_results = client.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            query_filter=qdrant_filter,
-            limit=top_k * 2,  # Recuperar más para luego deduplicar
-            with_payload=True,
-            score_threshold=0.45,  # Descartar resultados poco relevantes
-        )
+        # Buscar en Qdrant (soporta qdrant-client v1.16+)
+        if hasattr(client, "query_points"):
+            response = client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                query_filter=qdrant_filter,
+                limit=top_k * 2,
+                with_payload=True,
+                score_threshold=0.35,
+            )
+            search_results = getattr(response, "points", response)
+        elif hasattr(client, "search"):
+            search_results = client.search(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                query_filter=qdrant_filter,
+                limit=top_k * 2,
+                with_payload=True,
+                score_threshold=0.35,
+            )
+        else:
+            search_results = []
 
         if not search_results:
             logger.info("Sin resultados para query='%s' filters=%s", query, filters)
