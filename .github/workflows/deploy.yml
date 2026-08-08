@@ -71,11 +71,6 @@ jobs:
                 volumes:
                   - qdrant_storage:/qdrant/storage
                 restart: unless-stopped
-                healthcheck:
-                  test: ["CMD-SHELL", "wget -qO- http://localhost:6333/readyz || exit 1"]
-                  interval: 10s
-                  timeout: 5s
-                  retries: 5
 
               auth-api:
                 image: ${DOCKERHUB_USERNAME}/eduai-auth:latest
@@ -112,8 +107,7 @@ jobs:
                 volumes:
                   - core_data:/app/data
                 depends_on:
-                  qdrant:
-                    condition: service_healthy
+                  - qdrant
                 restart: always
 
               pdf-api:
